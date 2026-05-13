@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xxd \"c:/qtdaima/zhinengjiajv/qml/pages/SensorPage.qml\")",
+      "Bash(awk 'NR>=630 && NR<=685' \"c:/qtdaima/zhinengjiajv/qml/pages/SensorPage.qml\")",
+      "Read(//tmp/**)",
+      "Bash(git config *)"
+    ]
+  }
+}

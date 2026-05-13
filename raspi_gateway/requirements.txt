@@ -1,0 +1,11 @@
+# 树莓派智能家居网关 — Python 依赖
+# 安装方式: pip install -r requirements.txt
+
+# 串口通信 (必需)
+pyserial>=3.5
+
+# OpenCV — USB摄像头备选方案 (摄像头模块需要)
+opencv-python-headless>=4.5
+
+# picamera2 + libcamera 通过 apt 安装，不通过 pip
+# sudo apt install -y python3-picamera2 python3-libcamera

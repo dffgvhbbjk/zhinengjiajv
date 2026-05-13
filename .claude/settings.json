@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -i *)",
+      "Bash(xxd *)",
+      "Bash(awk *)"
+    ]
+  }
+}

@@ -1,0 +1,12 @@
+# Build outputs
+build/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Qt Creator user settings
+.qtcreator/CMakeLists.txt.user
+
+# IDE
+.vscode/
