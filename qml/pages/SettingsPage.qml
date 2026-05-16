@@ -327,12 +327,6 @@ Page {
         }
     }
 
-    function rebootDevice(deviceId) {
-        var commandId = "reboot_" + new Date().getTime()
-        TcpController.sendControlCommand(commandId, deviceId, "reboot")
-        snackbarShow(qsTr("设备重启指令已发送"))
-    }
-
     function backupDatabase() {
         var dbPath = DatabaseManager.databasePath
         if (dbPath === "" || !dbPath.endsWith(".db")) {
@@ -1215,24 +1209,6 @@ Page {
                                                     text: modelData["deviceType"] + " - " + modelData["ip"]
                                                     font.pixelSize: 12 * sc
                                                     color: "#90a4ae"
-                                                }
-                                            }
-
-                                            Button {
-                                                text: qsTr("重启")
-                                                flat: true
-                                                Layout.preferredHeight: 32 * sc
-                                                onClicked: rebootDevice(modelData["deviceId"])
-
-                                                background: Rectangle { radius: 6 * sc; color: parent.pressed ? "#ff9800" : "#1a1a2e" }
-
-                                                contentItem: Label {
-                                                    text: parent.text
-                                                    font.pixelSize: 12 * sc
-                                                    font.bold: true
-                                                    color: "#ff9800"
-                                                    horizontalAlignment: Text.AlignHCenter
-                                                    verticalAlignment: Text.AlignVCenter
                                                 }
                                             }
 

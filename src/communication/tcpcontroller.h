@@ -7,6 +7,7 @@
 #include <QList>
 #include <QPair>
 #include <QFile>
+#include <QMap>
 
 class DatabaseManager;
 
@@ -46,7 +47,7 @@ public:
     Q_INVOKABLE void sendAlertCommand(const QString &commandId, const QString &alertAction);
     Q_INVOKABLE void sendVoiceText(const QString &text, bool isCommand);
 
-    Q_INVOKABLE void startFirmwareUpdate(const QString &firmwareFilePath);
+Q_INVOKABLE void startFirmwareUpdate(const QString &firmwareFilePath);
     Q_INVOKABLE void cancelFirmwareUpdate();
 
     bool isConnected() const { return m_isConnected; }
@@ -55,6 +56,8 @@ public:
     int targetPort() const { return m_targetPort; }
     int videoPort() const { return m_videoPort; }
     int queueSize() const { return m_commandQueue.size(); }
+    qint64 getDeviceStateVersion(const QString &deviceId) const;
+    void updateDeviceStateVersion(const QString &deviceId, qint64 version);
 
     void setDatabaseManager(DatabaseManager *db);
 
@@ -70,6 +73,8 @@ signals:
     void rawVideoFrameReceived(const QByteArray &jpegData, int width, int height);
     void cameraStreamToggled(bool enabled);
     void deviceControlled(const QString &deviceId, const QString &action);
+    void deviceStateUpdated(const QString &deviceId, const QString &state);
+    void gatewayDeviceListReceived(const QString &gatewayId, const QVariantList &devices);
 
 private slots:
     void onConnected();
@@ -92,12 +97,15 @@ private:
     void sortCommandQueue();
     void sendCommand(const QVariantMap &command);
     void handleIncomingData(const QByteArray &data);
-    void handleCommandResponse(const QJsonObject &jsonObj);
+void handleCommandResponse(const QJsonObject &jsonObj);
     void handleAlertPacket(const QJsonObject &jsonObj);
     void handleFirmwareResponse(const QJsonObject &jsonObj);
     void handleVideoFrame(const QJsonObject &jsonObj);
+    void handleDeviceStatusPacket(const QJsonObject &jsonObj);
     bool sendFirmwareChunk(int chunkIndex);
     void resetConnectionState();
+    void purgeStaleCommands();
+    bool isCommandStale(const QVariantMap &command) const;
 
     QTcpSocket *m_tcpSocket;
     QTcpSocket *m_videoTcpSocket;
@@ -140,6 +148,9 @@ private:
     static constexpr int ReconnectIntervalMs = 10000;
     static constexpr int MaxReconnectAttempts = 5;
     static constexpr int FirmwareChunkSize = 1048576;
-    static constexpr int CommandRetryCount = 3;
-    static constexpr int MinVideoFrameIntervalUs = 66000;
+static constexpr int CommandRetryCount = 3;
+    static constexpr int MinVideoFrameIntervalMs = 66;
+    static constexpr qint64 CommandStalenessThresholdMs = 10000;
+
+    QMap<QString, qint64> m_deviceStateVersion;
 };

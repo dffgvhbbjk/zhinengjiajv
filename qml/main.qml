@@ -204,7 +204,7 @@ ApplicationWindow {
             }
         }
 
-        function onSensorFieldUpdated(deviceId, field, value) {
+        function onSensorFieldUpdated(deviceId, field, value, version) {
             if (mainWindow.devices[deviceId]) {
                 var dev = mainWindow.devices[deviceId];
                 switch (field) {

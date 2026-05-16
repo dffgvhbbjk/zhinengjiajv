@@ -27,12 +27,11 @@ Page {
     property double selectedTriggerSensorThreshold: 0
     property string selectedTriggerTime: editingScene["triggerTime"] || ""
     property string selectedTriggerDeviceAction: editingScene["triggerType"] === "device" ? (editingScene["triggerTime"] || "change") : "change"
-    property string actionsText: editingScene["actions"] || ""
     property var actionDevices: []
+    property var actionDeviceActions: ({})
 
     property bool _refreshing: false
     property bool canSave: sceneName.trim().length > 0
-    property var triggerDeviceIds: []
 
     readonly property var hourOptions: (function() {
         var arr = []; for (var h = 0; h < 24; h++) arr.push(String(h).padStart(2, '0')); return arr;
@@ -72,18 +71,70 @@ Page {
         return DeviceModel.count > 0 ? DeviceModel.deviceIdAt(0) : "";
     }
 
+    function defaultActionForDevice(deviceId) {
+        var t = getDeviceType(deviceId).toLowerCase();
+        if (t.indexOf("door") >= 0 || t.indexOf("门") >= 0) return "open";
+        if (t.indexOf("light") >= 0 || t.indexOf("灯") >= 0) return "on";
+        if (t.indexOf("fan") >= 0 || t.indexOf("风") >= 0) return "on";
+        if (t.indexOf("humidifier") >= 0 || t.indexOf("加湿") >= 0) return "on";
+        if (t.indexOf("buzzer") >= 0 || t.indexOf("蜂鸣") >= 0) return "on";
+        if (t.indexOf("master") >= 0 || t.indexOf("总控") >= 0) return "on";
+        return "on";
+    }
+
     function addDeviceToDeviceList(deviceId) {
-        if (root.actionDevices.indexOf(deviceId) < 0) { var newList = root.actionDevices.slice(); newList.push(deviceId); root.actionDevices = newList; }
+        if (root.actionDevices.indexOf(deviceId) < 0) {
+            var newList = root.actionDevices.slice();
+            newList.push(deviceId);
+            root.actionDevices = newList;
+            var newActions = {};
+            var keys = Object.keys(root.actionDeviceActions);
+            for (var k = 0; k < keys.length; k++) newActions[keys[k]] = root.actionDeviceActions[keys[k]];
+            newActions[deviceId] = defaultActionForDevice(deviceId);
+            root.actionDeviceActions = newActions;
+        }
     }
     function removeDeviceFromList(deviceId) {
         var idx = root.actionDevices.indexOf(deviceId);
-        if (idx >= 0) { var newList = root.actionDevices.slice(); newList.splice(idx, 1); root.actionDevices = newList; }
+        if (idx >= 0) {
+            var newList = root.actionDevices.slice();
+            newList.splice(idx, 1);
+            root.actionDevices = newList;
+            var newActions = {};
+            var keys = Object.keys(root.actionDeviceActions);
+            for (var k = 0; k < keys.length; k++) {
+                if (keys[k] !== deviceId) newActions[keys[k]] = root.actionDeviceActions[keys[k]];
+            }
+            root.actionDeviceActions = newActions;
+        }
     }
     function confirmDelete() { if (root.isEditMode) confirmDeleteDialog.open(); }
 
     function saveCurrentScene() {
         if (!canSave) { toast.show(qsTr("请输入场景名称")); return; }
+
+        if (root.actionDevices.length === 0) {
+            toast.show(qsTr("请至少选择一个执行设备"));
+            return;
+        }
+
+        if (root.selectedTriggerType === "device" && root.selectedTriggerDeviceId === "") {
+            toast.show(qsTr("请选择触发设备"));
+            return;
+        }
+
+        if (root.selectedTriggerType === "sensor" && root.selectedTriggerSensorDeviceId === "") {
+            toast.show(qsTr("请选择传感器来源"));
+            return;
+        }
+
         var actionDevicesJson = JSON.stringify(root.actionDevices);
+        var actionList = [];
+        for (var i = 0; i < root.actionDevices.length; i++) {
+            var devId = root.actionDevices[i];
+            actionList.push(root.actionDeviceActions[devId] || "on");
+        }
+        var actionsJson = JSON.stringify(actionList);
         var triggerTimeForDb = root.selectedTriggerTime;
         if (root.selectedTriggerType === "device")
             triggerTimeForDb = root.selectedTriggerDeviceAction;
@@ -94,10 +145,10 @@ Page {
         var sceneData = {
             "sceneId": root.editingScene["sceneId"] || ("scene_" + Date.now()),
             "sceneName": root.sceneName.trim(), "triggerType": root.selectedTriggerType,
-            "triggerDeviceId": root.selectedTriggerDeviceId,
+            "triggerDeviceId": root.selectedTriggerType === "device" ? root.selectedTriggerDeviceId : "",
             "triggerSensorData": root.selectedTriggerType === "sensor" ? sensorDataJson : "",
             "triggerTime": triggerTimeForDb,
-            "actions": root.actionsText.trim(), "actionDevices": actionDevicesJson,
+            "actions": actionsJson, "actionDevices": actionDevicesJson,
             "isEnabled": root.editingScene["isEnabled"] !== undefined ? root.editingScene["isEnabled"] : true,
             "createdAt": root.editingScene["createdAt"] || new Date().toISOString()
         };
@@ -110,13 +161,8 @@ Page {
         root.saveScene(sceneData);
     }
 
-    function updateTriggerDeviceIds() {
-        var ids = []; for (var i = 0; i < DeviceModel.count; i++) ids.push(DeviceModel.deviceIdAt(i));
-        root.triggerDeviceIds = ids;
-    }
-
     Component.onCompleted: {
-        _refreshing = true; DeviceModel.load(); _refreshing = false; updateTriggerDeviceIds();
+        _refreshing = true; DeviceModel.load(); _refreshing = false;
         if (root.editingScene && root.editingScene["sceneId"] !== "") {
             root.sceneName = root.editingScene["sceneName"] || "";
             root.selectedTriggerType = root.editingScene["triggerType"] || "manual";
@@ -132,17 +178,21 @@ Page {
                     root.selectedTriggerSensorThreshold = sensorData["threshold"] || 0;
                 }
             } catch (e) { root.selectedTriggerSensorType = "temperature"; root.selectedTriggerSensorOperator = ">"; root.selectedTriggerSensorThreshold = 0; }
-            root.actionsText = root.editingScene["actions"] || "";
             var actionDevicesStr = root.editingScene["actionDevices"];
             if (actionDevicesStr && typeof actionDevicesStr === 'string') {
                 try { root.actionDevices = JSON.parse(actionDevicesStr); } catch (e) { root.actionDevices = []; }
             } else if (Array.isArray(actionDevicesStr)) root.actionDevices = actionDevicesStr;
+            var actionsStr = root.editingScene["actions"] || "";
+            var parsedActions = [];
+            if (actionsStr && typeof actionsStr === 'string') {
+                try { parsedActions = JSON.parse(actionsStr); } catch (e) { parsedActions = []; }
+            } else if (Array.isArray(actionsStr)) parsedActions = actionsStr;
+            var newDeviceActions = {};
+            for (var di = 0; di < root.actionDevices.length; di++) {
+                newDeviceActions[root.actionDevices[di]] = (di < parsedActions.length && parsedActions[di]) ? parsedActions[di] : "on";
+            }
+            root.actionDeviceActions = newDeviceActions;
         }
-    }
-
-    Connections {
-        target: DeviceModel
-        function onCountChanged() { if (_refreshing) return; _refreshing = true; updateTriggerDeviceIds(); _refreshing = false; }
     }
 
     Rectangle {
@@ -444,16 +494,22 @@ Page {
                                 Label { text: qsTr("当以下设备状态变化时触发场景"); font.pixelSize: 13 * sc; color: "#e0e0e0" }
 
                                 ComboBox {
-                                    id: triggerDeviceCombo; Layout.fillWidth: true; model: root.triggerDeviceIds
-                                    displayText: root.getDeviceName(currentText) + (root.getDeviceType(currentText) ? " (" + root.getDeviceType(currentText) + ")" : "")
+                                    id: triggerDeviceCombo; Layout.fillWidth: true; model: DeviceModel; textRole: "deviceName"; valueRole: "deviceId"
+                                    displayText: {
+                                        if (currentIndex >= 0 && currentIndex < DeviceModel.count)
+                                            return DeviceModel.data(DeviceModel.index(currentIndex, 0), DeviceModel.DeviceNameRole) + " (" + DeviceModel.data(DeviceModel.index(currentIndex, 0), DeviceModel.DeviceTypeRole) + ")";
+                                        return qsTr("选择设备");
+                                    }
                                     Component.onCompleted: {
                                         if (root.selectedTriggerDeviceId !== "")
-                                            for (var i = 0; i < model.length; i++) { if (model[i] === root.selectedTriggerDeviceId) { currentIndex = i; break; } }
+                                            for (var i = 0; i < DeviceModel.count; i++) {
+                                                if (DeviceModel.deviceIdAt(i) === root.selectedTriggerDeviceId) { currentIndex = i; break; }
+                                            }
                                     }
-                                    onActivated: function(index) { root.selectedTriggerDeviceId = model[index]; }
+                                    onActivated: function(index) { root.selectedTriggerDeviceId = DeviceModel.deviceIdAt(index); }
                                     delegate: ItemDelegate {
                                         width: triggerDeviceCombo.width
-                                        contentItem: Label { text: root.getDeviceName(triggerDeviceCombo.model[index]) + (root.getDeviceType(triggerDeviceCombo.model[index]) ? " (" + root.getDeviceType(triggerDeviceCombo.model[index]) + ")" : ""); color: "#ffffff"; font.pixelSize: 13 * sc }
+                                        contentItem: Label { text: model.deviceName + (model.deviceType ? " (" + model.deviceType + ")" : ""); color: "#ffffff"; font.pixelSize: 13 * sc }
                                         background: Rectangle { color: index === triggerDeviceCombo.currentIndex ? "#1565C0" : "transparent" }
                                     }
                                 }
@@ -553,7 +609,11 @@ Page {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: Math.max(160 * sc, actionDeviceList.implicitHeight + 100 * sc)
+                    Layout.preferredHeight: {
+                        var selectedH = root.actionDevices.length > 0 ? Math.min(220 * sc, root.actionDevices.length * 52 * sc + 8 * sc) : 0;
+                        var pickerH = DeviceModel.count > 0 ? Math.min(260 * sc, Math.ceil(DeviceModel.count / 2) * 72 * sc + 8 * sc) : 0;
+                        return Math.max(120 * sc, selectedH + pickerH + 100 * sc);
+                    }
                     radius: 14 * sc; color: "#1e2844"
                     border.color: "#2a3f5f"; border.width: 1
 
@@ -565,7 +625,7 @@ Page {
                     ColumnLayout {
                         anchors.fill: parent
                         anchors.margins: 16 * sc
-                        spacing: 12 * sc
+                        spacing: 8 * sc
 
                         RowLayout {
                             Layout.fillWidth: true; spacing: 6 * sc
@@ -575,25 +635,71 @@ Page {
                             Label { text: qsTr("%1 个设备").arg(root.actionDevices.length); font.pixelSize: 12 * sc; color: "#9e9e9e" }
                         }
 
+                        Label {
+                            visible: DeviceModel.count === 0
+                            text: qsTr("暂无设备，请先连接网关")
+                            font.pixelSize: 12 * sc; color: "#9e9e9e"
+                            Layout.alignment: Qt.AlignHCenter
+                        }
+
                         ListView {
                             id: actionDeviceList
                             Layout.fillWidth: true
-                            implicitHeight: Math.min(180 * sc, root.actionDevices.length * 44 * sc + 8 * sc)
+                            implicitHeight: root.actionDevices.length > 0 ? Math.min(220 * sc, root.actionDevices.length * 52 * sc + 8 * sc) : 0
                             model: root.actionDevices; spacing: 6 * sc; clip: true
+                            visible: root.actionDevices.length > 0
 
                             delegate: Rectangle {
-                                width: actionDeviceList.width; height: 40 * sc; radius: 8 * sc
+                                width: actionDeviceList.width; height: 48 * sc; radius: 8 * sc
                                 color: "#152038"; border.color: "#424242"; border.width: 1
 
                                 RowLayout {
                                     anchors.fill: parent
-                                    anchors.margins: 10 * sc; spacing: 10 * sc
+                                    anchors.margins: 10 * sc; spacing: 8 * sc
                                     Label { text: "💻"; font.pixelSize: 16 * sc }
                                     ColumnLayout {
-                                        Layout.fillWidth: true; spacing: 2 * sc
-                                        Label { text: root.getDeviceName(modelData); font.pixelSize: 13 * sc; color: "#ffffff" }
+                                        Layout.fillWidth: true; spacing: 1 * sc
+                                        Label { text: root.getDeviceName(modelData); font.pixelSize: 13 * sc; color: "#ffffff"; elide: Text.ElideRight; Layout.fillWidth: true }
                                         Label { text: root.getDeviceType(modelData); font.pixelSize: 10 * sc; color: "#9e9e9e" }
                                     }
+
+                                    Rectangle {
+                                        width: 52 * sc; height: 28 * sc; radius: 14 * sc
+                                        color: root.actionDeviceActions[modelData] === "on" || root.actionDeviceActions[modelData] === "open" ? "#2e7d32" : "#c62828"
+                                        border.color: root.actionDeviceActions[modelData] === "on" || root.actionDeviceActions[modelData] === "open" ? "#4caf50" : "#ef5350"
+                                        border.width: 1
+
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            onClicked: {
+                                                var cur = root.actionDeviceActions[modelData] || "on";
+                                                var devType = root.getDeviceType(modelData).toLowerCase();
+                                                var newAction = "on";
+                                                if (devType.indexOf("door") >= 0 || devType.indexOf("门") >= 0) {
+                                                    newAction = (cur === "open") ? "close" : "open";
+                                                } else {
+                                                    newAction = (cur === "on") ? "off" : "on";
+                                                }
+                                                var newActions = JSON.parse(JSON.stringify(root.actionDeviceActions));
+                                                newActions[modelData] = newAction;
+                                                root.actionDeviceActions = newActions;
+                                            }
+                                        }
+
+                                        Label {
+                                            anchors.centerIn: parent
+                                            text: {
+                                                var act = root.actionDeviceActions[modelData] || "on";
+                                                if (act === "open") return qsTr("开");
+                                                if (act === "close") return qsTr("关");
+                                                if (act === "on") return qsTr("开");
+                                                if (act === "off") return qsTr("关");
+                                                return act;
+                                            }
+                                            font.pixelSize: 11 * sc; font.bold: true; color: "#ffffff"
+                                        }
+                                    }
+
                                     Rectangle {
                                         width: 26 * sc; height: 26 * sc; radius: 6 * sc; color: "#c62828"
                                         MouseArea {
@@ -605,29 +711,61 @@ Page {
                             }
                         }
 
-                        Rectangle {
-                            Layout.fillWidth: true; height: 38 * sc; radius: 8 * sc
-                            color: DeviceModel.count > 0 ? "#3d3d3d" : "#152038"
-                            MouseArea {
-                                anchors.fill: parent; enabled: DeviceModel.count > 0
-                                onClicked: { if (DeviceModel.count > 0) deviceSelectorDialog.open(); }
-                                hoverEnabled: true
-                                Rectangle { anchors.fill: parent; radius: 8 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.15 : (parent.containsMouse ? 0.08 : 0) }
-                                Row {
-                                    anchors.centerIn: parent; spacing: 6 * sc
-                                    Label { text: "+"; font.pixelSize: 18 * sc; font.bold: true; color: DeviceModel.count > 0 ? "#81c784" : "#555555" }
-                                    Label { text: qsTr("添加设备"); font.pixelSize: 13 * sc; color: DeviceModel.count > 0 ? "#81c784" : "#555555" }
-                                }
-                            }
+                        Label {
+                            text: qsTr("点击选择执行设备：")
+                            font.pixelSize: 12 * sc; color: "#9e9e9e"
+                            visible: DeviceModel.count > 0
                         }
 
-                        TextField {
+                        GridView {
+                            id: devicePicker
                             Layout.fillWidth: true
-                            placeholderText: qsTr("动作描述（可选）"); placeholderTextColor: "#757575"
-                            font.pixelSize: 13 * sc; color: "#ffffff"
-                            background: Rectangle { radius: 8 * sc; color: "#2d2d2d"; border.color: activeFocus ? "#81c784" : "#424242"; border.width: 1 }
-                            Component.onCompleted: text = root.actionsText
-                            onEditingFinished: root.actionsText = text
+                            Layout.preferredHeight: Math.min(260 * sc, Math.ceil(DeviceModel.count / 2) * 72 * sc + 8 * sc)
+                            cellWidth: (width - 6 * sc) / 2
+                            cellHeight: 68 * sc
+                            model: DeviceModel
+                            clip: true
+                            visible: DeviceModel.count > 0
+
+                            delegate: Rectangle {
+                                width: devicePicker.cellWidth - 6 * sc
+                                height: devicePicker.cellHeight - 6 * sc
+                                radius: 10 * sc
+                                color: root.actionDevices.indexOf(model.deviceId) >= 0 ? "#1b5e20" : "#152038"
+                                border.color: root.actionDevices.indexOf(model.deviceId) >= 0 ? "#4caf50" : "#424242"
+                                border.width: root.actionDevices.indexOf(model.deviceId) >= 0 ? 2 : 1
+
+                                RowLayout {
+                                    anchors.fill: parent
+                                    anchors.margins: 8 * sc
+                                    spacing: 6 * sc
+
+                                    Label { text: "💻"; font.pixelSize: 16 * sc }
+
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 1 * sc
+                                        Label { text: model.deviceName || qsTr("未命名设备"); font.pixelSize: 12 * sc; color: "#ffffff"; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Label { text: model.deviceType || ""; font.pixelSize: 9 * sc; color: "#9e9e9e" }
+                                    }
+
+                                    Label {
+                                        text: root.actionDevices.indexOf(model.deviceId) >= 0 ? "✓" : "+"
+                                        font.pixelSize: 16 * sc; font.bold: true
+                                        color: root.actionDevices.indexOf(model.deviceId) >= 0 ? "#a5d6a7" : "#4fc3f7"
+                                    }
+                                }
+
+                                MouseArea {
+                                    anchors.fill: parent
+                                    z: 1
+                                    hoverEnabled: true
+                                    onClicked: {
+                                        var idx = root.actionDevices.indexOf(model.deviceId);
+                                        if (idx >= 0) root.removeDeviceFromList(model.deviceId);
+                                        else root.addDeviceToDeviceList(model.deviceId);
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -653,52 +791,6 @@ Page {
                     Label { text: qsTr("删除此场景"); font.pixelSize: 14 * sc; color: "#ef5350" }
                 }
             }
-        }
-    }
-
-    Dialog {
-        id: deviceSelectorDialog
-        title: qsTr("选择执行设备")
-        modal: true
-        width: 400 * sc; height: 400 * sc
-        anchors.centerIn: parent
-
-        onOpened: DeviceModel.load()
-
-        ColumnLayout {
-            width: parent.width; spacing: 12 * sc
-            Label { text: qsTr("从已有设备中选择"); font.pixelSize: 14 * sc; color: "#9e9e9e"; Layout.alignment: Qt.AlignHCenter }
-
-            ListView {
-                Layout.fillWidth: true; Layout.fillHeight: true; model: DeviceModel; spacing: 6 * sc; clip: true
-
-                delegate: Rectangle {
-                    width: ListView.view.width; height: 44 * sc; radius: 8 * sc
-                    color: root.actionDevices.indexOf(model.deviceId) >= 0 ? "#1b5e20" : "#152038"
-                    border.color: root.actionDevices.indexOf(model.deviceId) >= 0 ? "#4caf50" : "#424242"; border.width: 1
-
-                    RowLayout {
-                        anchors.fill: parent; anchors.margins: 10 * sc; spacing: 10 * sc
-                        Label { text: "💻"; font.pixelSize: 18 * sc }
-                        ColumnLayout {
-                            Layout.fillWidth: true; spacing: 2 * sc
-                            Label { text: model.deviceName || qsTr("未命名设备"); font.pixelSize: 13 * sc; color: "#ffffff" }
-                            Label { text: model.deviceType || ""; font.pixelSize: 10 * sc; color: "#9e9e9e" }
-                        }
-                        Label { text: root.actionDevices.indexOf(model.deviceId) >= 0 ? "✓" : "+"; font.pixelSize: 16 * sc; color: root.actionDevices.indexOf(model.deviceId) >= 0 ? "#a5d6a7" : "#4fc3f7" }
-                    }
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: {
-                            var idx = root.actionDevices.indexOf(model.deviceId);
-                            if (idx >= 0) root.removeDeviceFromList(model.deviceId);
-                            else root.addDeviceToDeviceList(model.deviceId);
-                        }
-                    }
-                }
-            }
-
-            Button { text: qsTr("关闭"); Layout.alignment: Qt.AlignHCenter; onClicked: deviceSelectorDialog.close() }
         }
     }
 

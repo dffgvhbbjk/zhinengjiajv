@@ -66,7 +66,16 @@ class SerialManager:
     # ---- 发送 ----------------------------------------------------------
 
     def send_frame(self, frame: bytes):
-        """发送一帧到 STM32"""
+        """发送一帧到 STM32（串口打开时同步写入，否则入队等待重连后发送）"""
+        if self.ser and self.ser.is_open:
+            try:
+                self.ser.write(frame)
+                logger.debug(f"TX: {frame.hex(' ').upper()}")
+                return
+            except Exception as e:
+                logger.error(f"串口写入失败: {e}, 将尝试重连")
+                self._close_port()
+                raise
         self._send_queue.put(frame)
 
     # ---- 收发轮询（主循环中调用） ---------------------------------------

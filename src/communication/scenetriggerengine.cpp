@@ -41,6 +41,7 @@ void SceneTriggerEngine::start()
         return;
     m_running = true;
     m_timer->start();
+    checkTimeTriggers();
     qDebug() << "[场景引擎] 场景触发引擎已启动";
     emit runningChanged(true);
 }
@@ -69,6 +70,16 @@ void SceneTriggerEngine::checkTimeTriggers()
 
         evaluateTimeScene(scene);
     }
+}
+
+void SceneTriggerEngine::onSensorFieldUpdated(const QString &deviceId, const QString &field, double value)
+{
+    if (!m_running)
+        return;
+
+    QVariantMap sensorData;
+    sensorData[field] = value;
+    onSensorDataReceived(deviceId, sensorData);
 }
 
 void SceneTriggerEngine::onSensorDataReceived(const QString &deviceId, const QVariantMap &sensorData)
@@ -237,8 +248,24 @@ void SceneTriggerEngine::evaluateDeviceScene(const QVariantMap &scene, const QSt
     if (triggerDeviceId != deviceId)
         return;
 
-    if (!triggerAction.isEmpty() && triggerAction != action)
-        return;
+    // "change" 表示任意状态变化都触发
+    if (triggerAction.isEmpty() || triggerAction == "change")
+    {
+        // 匹配任意变化
+    }
+    else
+    {
+        // 兼容不同命名：on=turn_on, off=turn_off, open=turn_on, close=turn_off
+        QString normTrigger = triggerAction.toLower();
+        QString normAction = action.toLower();
+        bool match = (normAction == normTrigger)
+                  || (normTrigger == "on"  && (normAction == "turn_on"  || normAction == "open"))
+                  || (normTrigger == "off" && (normAction == "turn_off" || normAction == "close"))
+                  || (normTrigger == "open"  && (normAction == "turn_on"  || normAction == "on"))
+                  || (normTrigger == "close" && (normAction == "turn_off" || normAction == "off"));
+        if (!match)
+            return;
+    }
 
     QString sceneId = scene.value("scene_id").toString();
     QString sceneName = scene.value("scene_name").toString();
@@ -354,6 +381,12 @@ void SceneTriggerEngine::executeScene(const QString &sceneId, const QString &sce
     {
         qWarning() << "[场景引擎] TcpController 未设置，无法发送场景命令";
         recordSceneExecution(sceneId, false, QStringLiteral("TcpController未设置"));
+        return;
+    }
+
+    if (!m_tcpController->isConnected())
+    {
+        qWarning() << "[场景引擎] 网关未连接，跳过场景:" << sceneName;
         return;
     }
 

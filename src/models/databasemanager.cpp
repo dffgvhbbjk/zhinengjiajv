@@ -116,6 +116,9 @@ bool DatabaseManager::createTables()
             expire_date TEXT DEFAULT '',
             effective_count INTEGER DEFAULT 0,
             last_executed_at TEXT DEFAULT '',
+            trigger_condition TEXT DEFAULT '',
+            scene_status TEXT DEFAULT '',
+            status_message TEXT DEFAULT '',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
@@ -192,37 +195,49 @@ bool DatabaseManager::createTables()
     struct AlterInfo {
         QString table;
         QString column;
+        QString typeDefault; // e.g. "TEXT DEFAULT ''" or "INTEGER DEFAULT 0"
     };
 
     QList<AlterInfo> alterInfos = {
-        {"devices",     "room"},
-        {"energy_data", "light"},
-        {"energy_data", "rain"},
-        {"energy_data", "smoke"},
-        {"energy_data", "lpg"},
-        {"energy_data", "air_quality"},
-        {"energy_data", "pressure"},
+        {"devices",     "room",             "TEXT DEFAULT ''"},
+        {"energy_data", "light",            "REAL DEFAULT 0"},
+        {"energy_data", "rain",             "REAL DEFAULT 0"},
+        {"energy_data", "smoke",            "REAL DEFAULT 0"},
+        {"energy_data", "lpg",              "REAL DEFAULT 0"},
+        {"energy_data", "air_quality",      "REAL DEFAULT 0"},
+        {"energy_data", "pressure",         "REAL DEFAULT 0"},
+        {"scenes",      "trigger_type",     "TEXT NOT NULL DEFAULT 'manual'"},
+        {"scenes",      "trigger_device_id","TEXT DEFAULT ''"},
+        {"scenes",      "trigger_sensor_data","TEXT DEFAULT ''"},
+        {"scenes",      "trigger_time",     "TEXT DEFAULT ''"},
+        {"scenes",      "action_devices",   "TEXT DEFAULT '[]'"},
+        {"scenes",      "is_enabled",       "INTEGER DEFAULT 1"},
+        {"scenes",      "effective_date",   "TEXT DEFAULT ''"},
+        {"scenes",      "expire_date",      "TEXT DEFAULT ''"},
+        {"scenes",      "effective_count",  "INTEGER DEFAULT 0"},
+        {"scenes",      "last_executed_at", "TEXT DEFAULT ''"},
+        {"scenes",      "trigger_condition","TEXT DEFAULT ''"},
+        {"scenes",      "scene_status",     "TEXT DEFAULT ''"},
+        {"scenes",      "status_message",   "TEXT DEFAULT ''"},
+        {"scenes",      "created_at",       "TEXT DEFAULT CURRENT_TIMESTAMP"},
+        {"scenes",      "updated_at",       "TEXT DEFAULT CURRENT_TIMESTAMP"},
     };
 
     for (const auto &info : alterInfos)
     {
+        QString checkSql = QString("SELECT COUNT(*) FROM pragma_table_info('%1') WHERE name = '%2'")
+                               .arg(info.table, info.column);
         QSqlQuery checkQuery(db);
-        checkQuery.prepare("SELECT COUNT(*) FROM pragma_table_info(:table) WHERE name = :column");
-        checkQuery.bindValue(":table", info.table);
-        checkQuery.bindValue(":column", info.column);
+        bool exists = checkQuery.exec(checkSql) && checkQuery.next() && checkQuery.value(0).toInt() > 0;
 
-        if (checkQuery.exec() && checkQuery.next() && checkQuery.value(0).toInt() > 0)
+        if (exists)
             continue;
 
-        QString alterSql = QString("ALTER TABLE %1 ADD COLUMN %2").arg(info.table, info.column);
-        if (info.table == "devices")
-            alterSql += " TEXT DEFAULT ''";
-        else
-            alterSql += " REAL DEFAULT 0";
+        QString alterSql = QString("ALTER TABLE %1 ADD COLUMN %2 ").arg(info.table, info.column) + info.typeDefault;
 
         QSqlQuery alterQuery(db);
         if (alterQuery.exec(alterSql))
-            qDebug() << "DatabaseManager: Added column successfully:" << alterSql;
+            qDebug() << "DatabaseManager: Added column:" << info.table << "." << info.column;
         else
             qWarning() << "DatabaseManager: Failed to add column:" << alterSql << alterQuery.lastError().text();
     }
@@ -551,80 +566,100 @@ bool DatabaseManager::addScene(const QString &sceneId, const QString &sceneName,
                                const QString &triggerSensorData, const QString &triggerTime,
                                const QString &actions, const QString &actionDevices)
 {
-    QString sql = R"(
-        INSERT OR REPLACE INTO scenes (
-            scene_id, scene_name, trigger_type, trigger_device_id,
-            trigger_sensor_data, trigger_time, actions, action_devices,
-            is_enabled
-        )
-        VALUES (
-            :scene_id, :scene_name, :trigger_type, :trigger_device_id,
-            :trigger_sensor_data, :trigger_time, :actions, :action_devices,
-            1
-        )
-    )";
+    auto esc = [](const QString &s) -> QString {
+        QString r; r.reserve(s.size() + 4);
+        for (QChar c : s) {
+            if (c == QLatin1Char('\''))
+                r.append("''");
+            else
+                r.append(c);
+        }
+        return r;
+    };
 
-    QVariantMap params;
-    params.insert("scene_id", sceneId);
-    params.insert("scene_name", sceneName);
-    params.insert("trigger_type", triggerType);
-    params.insert("trigger_device_id", triggerDeviceId);
-    params.insert("trigger_sensor_data", triggerSensorData);
-    params.insert("trigger_time", triggerTime);
-    params.insert("actions", actions);
-    params.insert("action_devices", actionDevices);
+    QSqlDatabase db = QSqlDatabase::database("SmartHomeConnection");
+    QSqlQuery query(db);
+    QString sql = QStringLiteral(
+        "INSERT OR REPLACE INTO scenes"
+        " (scene_id, scene_name, trigger_type, trigger_device_id,"
+        " trigger_sensor_data, trigger_time, actions, action_devices,"
+        " trigger_condition, is_enabled)"
+        " VALUES ('%1','%2','%3','%4','%5','%6','%7','%8','',1)")
+        .arg(esc(sceneId),
+             esc(sceneName),
+             esc(triggerType),
+             esc(triggerDeviceId),
+             esc(triggerSensorData),
+             esc(triggerTime),
+             esc(actions),
+             esc(actionDevices));
 
-    bool success = executeQuery(sql, params);
-    if (success)
+    if (!query.exec(sql))
     {
-        QVariantMap scene = getScene(sceneId);
-        emit sceneAdded(scene);
+        qWarning() << "DatabaseManager: addScene failed:" << query.lastError().text()
+                   << "sceneId=" << sceneId;
+        return false;
     }
-    return success;
+
+    QVariantMap scene = getScene(sceneId);
+    emit sceneAdded(scene);
+    return true;
 }
 
 bool DatabaseManager::updateScene(const QString &sceneId, const QVariantMap &sceneData)
 {
     if (sceneData.isEmpty())
-    {
+        return false;
+
+    static const QHash<QString, QString> kc = {
+        {"sceneId", "scene_id"}, {"sceneName", "scene_name"},
+        {"triggerType", "trigger_type"}, {"triggerDeviceId", "trigger_device_id"},
+        {"triggerSensorData", "trigger_sensor_data"}, {"triggerTime", "trigger_time"},
+        {"actions", "actions"}, {"actionDevices", "action_devices"},
+        {"isEnabled", "is_enabled"}, {"effectiveDate", "effective_date"},
+        {"expireDate", "expire_date"}, {"effectiveCount", "effective_count"},
+        {"lastExecutedAt", "last_executed_at"}, {"createdAt", "created_at"},
+        {"sceneStatus", "scene_status"}, {"statusMessage", "status_message"},
+    };
+
+    auto esc = [](const QString &s) -> QString {
+        QString r; r.reserve(s.size() + 4);
+        for (QChar c : s) { if (c == QLatin1Char('\'')) r.append("''"); else r.append(c); }
+        return r;
+    };
+
+    QStringList sets;
+    sets.append("updated_at = CURRENT_TIMESTAMP");
+    for (auto it = sceneData.constBegin(); it != sceneData.constEnd(); ++it) {
+        QString col = kc.value(it.key(), it.key());
+        if (col == "scene_id") continue;
+        sets.append(col + " = '" + esc(it.value().toString()) + "'");
+    }
+
+    QSqlDatabase db = QSqlDatabase::database("SmartHomeConnection");
+    QSqlQuery query(db);
+    QString sql = "UPDATE scenes SET " + sets.join(", ") + " WHERE scene_id = '" + esc(sceneId) + "'";
+
+    if (!query.exec(sql)) {
+        qWarning() << "DatabaseManager: updateScene failed:" << query.lastError().text();
         return false;
     }
 
-    QStringList setClauses;
-    QVariantMap params;
-    params.insert("scene_id", sceneId);
-
-    for (auto it = sceneData.constBegin(); it != sceneData.constEnd(); ++it)
-    {
-        setClauses.append(it.key() + " = :" + it.key());
-        params.insert(it.key(), it.value());
-    }
-
-    setClauses.append("updated_at = CURRENT_TIMESTAMP");
-
-    QString sql = "UPDATE scenes SET " + setClauses.join(", ") + " WHERE scene_id = :scene_id";
-
-    bool success = executeQuery(sql, params);
-    if (success)
-    {
-        QVariantMap scene = getScene(sceneId);
-        emit sceneUpdated(scene);
-    }
-    return success;
+    QVariantMap scene = getScene(sceneId);
+    emit sceneUpdated(scene);
+    return true;
 }
 
 bool DatabaseManager::deleteScene(const QString &sceneId)
 {
-    QString sql = "DELETE FROM scenes WHERE scene_id = :scene_id";
-    QVariantMap params;
-    params.insert("scene_id", sceneId);
-
-    bool success = executeQuery(sql, params);
-    if (success)
-    {
-        emit sceneDeleted(sceneId);
-    }
-    return success;
+    QSqlDatabase db = QSqlDatabase::database("SmartHomeConnection");
+    QSqlQuery query(db);
+    QString sql = QString("DELETE FROM scenes WHERE scene_id = '%1'")
+                      .arg(QString(sceneId).replace(QLatin1String("'"), QLatin1String("''")));
+    if (!query.exec(sql))
+        return false;
+    emit sceneDeleted(sceneId);
+    return true;
 }
 
 QVariantList DatabaseManager::getAllScenes() const
@@ -636,61 +671,56 @@ QVariantMap DatabaseManager::getScene(const QString &sceneId) const
 {
     QSqlDatabase db = QSqlDatabase::database("SmartHomeConnection");
     QSqlQuery query(db);
-    query.prepare("SELECT * FROM scenes WHERE scene_id = :scene_id");
-    query.bindValue(":scene_id", sceneId);
-
-    if (query.exec() && query.next())
-    {
+    QString sql = QString("SELECT * FROM scenes WHERE scene_id = '%1'")
+                      .arg(QString(sceneId).replace(QLatin1String("'"), QLatin1String("''")));
+    if (query.exec(sql) && query.next())
         return queryToMap(query);
-    }
     return QVariantMap();
 }
 
 bool DatabaseManager::enableScene(const QString &sceneId, bool enabled)
 {
-    QString sql = "UPDATE scenes SET is_enabled = :is_enabled, updated_at = CURRENT_TIMESTAMP WHERE scene_id = :scene_id";
-
-    QVariantMap params;
-    params.insert("is_enabled", enabled ? 1 : 0);
-    params.insert("scene_id", sceneId);
-
-    bool success = executeQuery(sql, params);
-    if (success)
+    QSqlDatabase db = QSqlDatabase::database("SmartHomeConnection");
+    QSqlQuery query(db);
+    QString sql = QString("UPDATE scenes SET is_enabled = %1, updated_at = CURRENT_TIMESTAMP WHERE scene_id = '%2'")
+                      .arg(enabled ? 1 : 0)
+                      .arg(QString(sceneId).replace(QLatin1String("'"), QLatin1String("''")));
+    if (!query.exec(sql))
     {
-        QVariantMap scene = getScene(sceneId);
-        emit sceneUpdated(scene);
+        qWarning() << "DatabaseManager: enableScene failed:" << query.lastError().text();
+        return false;
     }
-    return success;
+    QVariantMap scene = getScene(sceneId);
+    emit sceneUpdated(scene);
+    return true;
 }
 
 bool DatabaseManager::incrementSceneExecCount(const QString &sceneId)
 {
-    QString sql = "UPDATE scenes SET effective_count = effective_count + 1, last_executed_at = :now WHERE scene_id = :scene_id";
-    QVariantMap params;
-    params.insert("now", QDateTime::currentDateTime().toString(Qt::ISODate));
-    params.insert("scene_id", sceneId);
-    bool success = executeQuery(sql, params);
-    if (success)
-    {
-        QVariantMap scene = getScene(sceneId);
-        emit sceneUpdated(scene);
-    }
-    return success;
+    QSqlDatabase db = QSqlDatabase::database("SmartHomeConnection");
+    QSqlQuery query(db);
+    QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
+    QString sid = QString(sceneId).replace(QLatin1String("'"), QLatin1String("''"));
+    QString sql = "UPDATE scenes SET effective_count = effective_count + 1, last_executed_at = '" + now + "' WHERE scene_id = '" + sid + "'";
+    if (!query.exec(sql))
+        return false;
+    QVariantMap scene = getScene(sceneId);
+    emit sceneUpdated(scene);
+    return true;
 }
 
 bool DatabaseManager::updateSceneLastExecuted(const QString &sceneId)
 {
-    QString sql = "UPDATE scenes SET last_executed_at = :now WHERE scene_id = :scene_id";
-    QVariantMap params;
-    params.insert("now", QDateTime::currentDateTime().toString(Qt::ISODate));
-    params.insert("scene_id", sceneId);
-    bool success = executeQuery(sql, params);
-    if (success)
-    {
-        QVariantMap scene = getScene(sceneId);
-        emit sceneUpdated(scene);
-    }
-    return success;
+    QSqlDatabase db = QSqlDatabase::database("SmartHomeConnection");
+    QSqlQuery query(db);
+    QString now = QDateTime::currentDateTime().toString(Qt::ISODate);
+    QString sid = QString(sceneId).replace(QLatin1String("'"), QLatin1String("''"));
+    QString sql = "UPDATE scenes SET last_executed_at = '" + now + "' WHERE scene_id = '" + sid + "'";
+    if (!query.exec(sql))
+        return false;
+    QVariantMap scene = getScene(sceneId);
+    emit sceneUpdated(scene);
+    return true;
 }
 
 // ======================== Energy Data Operations ========================

@@ -161,9 +161,9 @@ Page {
 
     function _generateGradientBase(typeName) {
         var hash = _hashString(typeName);
-        var r = (((Math.abs(hash) * 0.618033988749895) % 1.0) * 0.15 + 0.06).toFixed(2);
-        var g = (((Math.abs(hash * 3) * 0.618033988749895) % 1.0) * 0.15 + 0.06).toFixed(2);
-        var b = (((Math.abs(hash * 7) * 0.618033988749895) % 1.0) * 0.15 + 0.08).toFixed(2);
+        var r = (((Math.abs(hash) * 0.618033988749895) % 1.0) * 0.18 + 0.09).toFixed(2);
+        var g = (((Math.abs(hash * 3) * 0.618033988749895) % 1.0) * 0.18 + 0.09).toFixed(2);
+        var b = (((Math.abs(hash * 7) * 0.618033988749895) % 1.0) * 0.18 + 0.11).toFixed(2);
         return [r, g, b];
     }
 
@@ -178,9 +178,9 @@ Page {
             return _gradientCache[typeName];
         var base = _generateGradientBase(typeName);
         var idx = Math.abs(_hashString(typeName + "shift")) % 3;
-        base[idx] = (parseFloat(base[idx]) + 0.07).toFixed(2);
+        base[idx] = (parseFloat(base[idx]) + 0.14).toFixed(2);
         var endColor = "#" + _toHexChannel(base[0]) + _toHexChannel(base[1]) + _toHexChannel(base[2]);
-        base[idx] = (parseFloat(base[idx]) - 0.07).toFixed(2);
+        base[idx] = (parseFloat(base[idx]) - 0.14).toFixed(2);
         var startColor = "#" + _toHexChannel(base[0]) + _toHexChannel(base[1]) + _toHexChannel(base[2]);
         _gradientCache[typeName] = [startColor, endColor];
         return _gradientCache[typeName];
@@ -192,13 +192,13 @@ Page {
 
     function getDeviceGradientStart(deviceType, isOnline) {
         if (!isOnline)
-            return "#1a1a24";
+            return "#1a1a28";
         return _getOrCalcGradient(deviceType)[0];
     }
 
     function getDeviceGradientEnd(deviceType, isOnline) {
         if (!isOnline)
-            return "#22222e";
+            return "#20202e";
         return _getOrCalcGradient(deviceType)[1];
     }
 
@@ -584,14 +584,14 @@ Page {
                 id: deviceGridView
                 anchors.fill: parent
                 cellWidth: width / 2
-                cellHeight: 240 * sc
+                cellHeight: 280 * sc
                 model: DeviceModel
                 clip: true
 
                 delegate: Rectangle {
                     id: deviceCard
                     width: (deviceGridView.width / 2) - 14 * sc
-                    height: 228 * sc
+                    height: 268 * sc
                     radius: 18 * sc
                     clip: true
 
@@ -619,21 +619,21 @@ Page {
                     Rectangle {
                         anchors.top: parent.top
                         anchors.right: parent.right
-                        anchors.margins: 12 * sc
-                        width: (model.deviceType || "").length * 12 * sc + 12 * sc
-                        height: 22 * sc
-                        radius: 6 * sc
+                        anchors.margins: 10 * sc
+                        width: (model.deviceType || "").length * 10 * sc + 16 * sc
+                        height: 20 * sc
+                        radius: 10 * sc
                         color: getDeviceTypeColor(model.deviceType || "")
-                        opacity: 0.12
+                        opacity: model.status ? 0.2 : 0.08
 
                         Label {
                             id: tagLabel
                             anchors.centerIn: parent
                             text: model.deviceType || ""
                             font.pixelSize: 10 * sc
-                            font.weight: Font.Medium
+                            font.weight: Font.Bold
                             color: getDeviceTypeColor(model.deviceType || "")
-                            opacity: 0.85
+                            opacity: model.status ? 1.0 : 0.5
                         }
                     }
 
@@ -658,7 +658,7 @@ Page {
                                 height: 52 * sc
                                 radius: 14 * sc
                                 color: getDeviceTypeColor(model.deviceType || "")
-                                opacity: model.status ? 0.18 : 0.08
+                                opacity: model.status ? 0.22 : 0.08
 
                                 Label {
                                     anchors.centerIn: parent
@@ -673,9 +673,16 @@ Page {
                                     width: 14 * sc
                                     height: 14 * sc
                                     radius: 7 * sc
-                                    color: model.status ? "#4CAF50" : "#616161"
-                                    border.color: getDeviceGradientEnd(model.deviceType || "", true)
+                                    color: model.status ? "#66BB6A" : "#757575"
+                                    border.color: model.status ? getDeviceGradientEnd(model.deviceType || "", true) : "#444455"
                                     border.width: 2
+
+                                    SequentialAnimation on opacity {
+                                        running: model.status
+                                        loops: Animation.Infinite
+                                        NumberAnimation { to: 0.4; duration: 1500 }
+                                        NumberAnimation { to: 1.0; duration: 1500 }
+                                    }
                                 }
                             }
 
@@ -699,7 +706,7 @@ Page {
                                         width: model.status ? 52 * sc : 40 * sc
                                         height: 22 * sc
                                         radius: 11 * sc
-                                        color: model.status ? "#1b3a1b" : "#3a1b1b"
+                                        color: model.status ? "#1a3d1a" : "#3d1a1a"
 
                                         Row {
                                             anchors.centerIn: parent
@@ -709,15 +716,22 @@ Page {
                                                 width: 7 * sc
                                                 height: 7 * sc
                                                 radius: 3.5 * sc
-                                                color: model.status ? "#4CAF50" : "#EF5350"
+                                                color: model.status ? "#66BB6A" : "#EF5350"
                                                 anchors.verticalCenter: parent.verticalCenter
+
+                                                SequentialAnimation on opacity {
+                                                    running: model.status
+                                                    loops: Animation.Infinite
+                                                    NumberAnimation { to: 0.4; duration: 1200 }
+                                                    NumberAnimation { to: 1.0; duration: 1200 }
+                                                }
                                             }
 
                                             Label {
                                                 text: model.status ? qsTr("在线") : qsTr("离线")
                                                 font.pixelSize: 11 * sc
-                                                font.weight: Font.DemiBold
-                                                color: model.status ? "#81C784" : "#EF9A9A"
+                                                font.weight: Font.Bold
+                                                color: model.status ? "#A5D6A7" : "#EF9A9A"
                                             }
                                         }
                                     }
@@ -774,8 +788,8 @@ Page {
                             Layout.fillWidth: true
                             Layout.fillHeight: true
                             radius: 12 * sc
-                            color: "#000000"
-                            opacity: 0.06
+                            color: "#0d1520"
+                            opacity: 0.85
                             clip: true
 
                             Loader {
@@ -1645,330 +1659,496 @@ Page {
         }
     }
 
-    component DoorControl: Item {
-        id: doorRoot
+    component DoorControl: ColumnLayout {
         property var loaderObj: null
-        property string currentDeviceId: loaderObj ? (loaderObj.currentDeviceId || "") : ""
+        property bool isOpen: false
 
-        width: 280 * sc; height: 580 * sc
+        spacing: 10 * sc
 
-        Rectangle {
-            anchors.fill: parent; radius: 14 * sc
-            color: "#1e222d"; border.color: Qt.rgba(141, 110, 99, 0.6)
-        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10 * sc
 
-        ColumnLayout {
-            anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top
-            anchors.topMargin: 24 * sc; spacing: 18 * sc
+            Rectangle {
+                width: 46 * sc; height: 26 * sc; radius: 13 * sc
+                color: isOpen ? "#8D6E63" : "#3a3a4a"
+                border.color: isOpen ? "#A1887F" : "#4a4a5a"
+                border.width: 2
+
+                Rectangle {
+                    x: isOpen ? parent.width - height - 2 : 2
+                    y: 2
+                    width: 22 * sc; height: 22 * sc; radius: 11 * sc
+                    color: isOpen ? "#ffffff" : "#888899"
+                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: loaderObj ? loaderObj.isOnline : false
+                    onClicked: {
+                        isOpen = !isOpen;
+                        sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", isOpen ? "open" : "close");
+                    }
+                }
+            }
 
             Label {
-                text: "🚪"; font.pixelSize: 56 * sc
-                Layout.alignment: Qt.AlignHCenter
+                text: isOpen ? qsTr("● 已开") : qsTr("○ 已关")
+                font.pixelSize: 13 * sc; font.weight: Font.DemiBold
+                color: isOpen ? "#A1887F" : "#90A4AE"
             }
 
-            ColumnLayout {
-                Layout.alignment: Qt.AlignHCenter; spacing: 4 * sc
-                Label {
-                    text: loaderObj ? (loaderObj.currentDeviceName || "未知设备") : "未知设备"
-                    font.pixelSize: 16 * sc; font.bold: true; color: "#d7ccc8"
-                    Layout.alignment: Qt.AlignHCenter
-                }
-                Label {
-                    text: qsTr("门")
-                    font.pixelSize: 11 * sc; color: "#8d6e63"
-                    Layout.alignment: Qt.AlignHCenter
-                }
-                Label {
-                    text: qsTr("状态: %1").arg(loaderObj && loaderObj.currentStatus ? loaderObj.currentStatus : qsTr("未知"))
-                    font.pixelSize: 12 * sc; color: "#a0a0a0"
-                    Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 6 * sc
-                }
-            }
+            Item { Layout.fillWidth: true }
+        }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#333" }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 12 * sc
 
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter; spacing: 24 * sc
-                Rectangle {
-                    width: 80 * sc; height: 80 * sc; radius: 10 * sc
-                    color: "#4caf50"
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: { sendDeviceCommand(doorRoot.currentDeviceId, "turn_on"); }
-                        Rectangle { anchors.fill: parent; radius: 10 * sc
-                            color: "#ffffff"; opacity: parent.pressed ? 0.2 : 0 }
+            Rectangle {
+                Layout.preferredWidth: 100 * sc; Layout.preferredHeight: 40 * sc
+                radius: 10 * sc
+                color: isOpen ? "#2E7D32" : "#4CAF50"
+                border.color: isOpen ? "#1B5E20" : "#388E3C"
+                border.width: 1
+
+                Label {
+                    anchors.centerIn: parent
+                    text: qsTr("开门")
+                    font.pixelSize: 15 * sc; font.bold: true
+                    color: "#ffffff"
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        isOpen = true;
+                        sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "open");
                     }
-                    Label { anchors.centerIn: parent; text: qsTr("开"); color: "#ffffff"; font.pixelSize: 20 * sc; font.bold: true }
-                }
-                Rectangle {
-                    width: 80 * sc; height: 80 * sc; radius: 10 * sc
-                    color: "#f44336"
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: { sendDeviceCommand(doorRoot.currentDeviceId, "turn_off"); }
-                        Rectangle { anchors.fill: parent; radius: 10 * sc
-                            color: "#ffffff"; opacity: parent.pressed ? 0.2 : 0 }
-                    }
-                    Label { anchors.centerIn: parent; text: qsTr("关"); color: "#ffffff"; font.pixelSize: 20 * sc; font.bold: true }
+                    Rectangle { anchors.fill: parent; radius: 10 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.2 : (parent.containsMouse ? 0.08 : 0) }
                 }
             }
+
+            Rectangle {
+                Layout.preferredWidth: 100 * sc; Layout.preferredHeight: 40 * sc
+                radius: 10 * sc
+                color: isOpen ? "#C62828" : "#EF5350"
+                border.color: isOpen ? "#B71C1C" : "#D32F2F"
+                border.width: 1
+
+                Label {
+                    anchors.centerIn: parent
+                    text: qsTr("关门")
+                    font.pixelSize: 15 * sc; font.bold: true
+                    color: "#ffffff"
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: {
+                        isOpen = false;
+                        sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "close");
+                    }
+                    Rectangle { anchors.fill: parent; radius: 10 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.2 : (parent.containsMouse ? 0.08 : 0) }
+                }
+            }
+
+            Item { Layout.fillWidth: true }
         }
     }
 
-    component FanControl: Item {
+    component FanControl: ColumnLayout {
         id: fanRoot
         property var loaderObj: null
-        property string currentDeviceId: loaderObj ? (loaderObj.currentDeviceId || "") : ""
+        property bool isPowerOn: false
         property int currentSpeed: 0
 
-        width: 280 * sc; height: 580 * sc
+        spacing: 10 * sc
 
-        Rectangle {
-            anchors.fill: parent; radius: 14 * sc
-            color: "#1e222d"; border.color: Qt.rgba(77, 208, 225, 0.6)
-        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10 * sc
 
-        ColumnLayout {
-            anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top
-            anchors.topMargin: 24 * sc; spacing: 18 * sc
+            Rectangle {
+                width: 46 * sc; height: 26 * sc; radius: 13 * sc
+                color: isPowerOn ? "#4DD0E1" : "#3a3a4a"
+                border.color: isPowerOn ? "#26C6DA" : "#4a4a5a"
+                border.width: 2
 
-            Label {
-                text: "🌀"; font.pixelSize: 56 * sc
-                Layout.alignment: Qt.AlignHCenter
-            }
-
-            ColumnLayout {
-                Layout.alignment: Qt.AlignHCenter; spacing: 4 * sc
-                Label {
-                    text: loaderObj ? (loaderObj.currentDeviceName || "未知设备") : "未知设备"
-                    font.pixelSize: 16 * sc; font.bold: true; color: "#b2ebf2"
-                    Layout.alignment: Qt.AlignHCenter
+                Rectangle {
+                    x: isPowerOn ? parent.width - height - 2 : 2
+                    y: 2
+                    width: 22 * sc; height: 22 * sc; radius: 11 * sc
+                    color: isPowerOn ? "#ffffff" : "#888899"
+                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
                 }
-                Label {
-                    text: qsTr("风扇")
-                    font.pixelSize: 11 * sc; color: "#4dd0e1"
-                    Layout.alignment: Qt.AlignHCenter
-                }
-                Label {
-                    text: qsTr("档位: %1").arg(fanRoot.currentSpeed)
-                    font.pixelSize: 12 * sc; color: "#a0a0a0"
-                    Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 6 * sc
-                }
-            }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#333" }
-
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter; spacing: 10 * sc
-                Repeater {
-                    model: [0, 1, 2, 3]
-                    delegate: Rectangle {
-                        width: 52 * sc; height: 52 * sc; radius: 26 * sc
-                        color: modelData === 0 ? "#555" : (fanRoot.currentSpeed === modelData ? "#00bcd4" : "#3a3f55")
-                        MouseArea {
-                            anchors.fill: parent
-                            onClicked: {
-                                fanRoot.currentSpeed = modelData;
-                                var act = modelData === 0 ? "turn_off" : ("speed_" + modelData);
-                                sendDeviceCommand(fanRoot.currentDeviceId, act);
-                            }
-                            Rectangle { anchors.fill: parent; radius: 26 * sc
-                                color: "#ffffff"; opacity: parent.pressed ? 0.2 : 0 }
-                        }
-                        Label {
-                            anchors.centerIn: parent
-                            text: modelData === 0 ? qsTr("关") : qsTr("%1档").arg(modelData)
-                            color: (modelData === 0 || fanRoot.currentSpeed === modelData) ? "#ffffff" : "#aaa"
-                            font.pixelSize: 12 * sc; font.bold: modelData !== 0 && fanRoot.currentSpeed === modelData
-                        }
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: loaderObj ? loaderObj.isOnline : false
+                    onClicked: {
+                        isPowerOn = !isPowerOn;
+                        sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", isPowerOn ? "speed_1" : "turn_off");
+                        if (isPowerOn) currentSpeed = 1;
+                        else currentSpeed = 0;
                     }
                 }
             }
+
+            Label {
+                text: isPowerOn ? qsTr("● 运行 %1档").arg(currentSpeed) : qsTr("○ 待机")
+                font.pixelSize: 13 * sc; font.weight: Font.DemiBold
+                color: isPowerOn ? "#4DD0E1" : "#90A4AE"
+            }
+
+            Item { Layout.fillWidth: true }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 8 * sc
+
+            Repeater {
+                model: [
+                    { "label": qsTr("关"), "speed": 0, "accent": "#78909C" },
+                    { "label": "1", "speed": 1, "accent": "#4DD0E1" },
+                    { "label": "2", "speed": 2, "accent": "#26C6DA" },
+                    { "label": "3", "speed": 3, "accent": "#00BCD4" }
+                ]
+
+                Rectangle {
+                    Layout.preferredWidth: 54 * sc; Layout.preferredHeight: 36 * sc
+                    radius: 8 * sc
+                    color: currentSpeed === modelData.speed ? modelData.accent : "#1a2030"
+                    border.color: currentSpeed === modelData.speed ? modelData.accent : "#2a3a4a"
+                    border.width: 2
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: modelData.label
+                        font.pixelSize: 14 * sc; font.bold: true
+                        color: currentSpeed === modelData.speed ? "#ffffff" : "#78909C"
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            currentSpeed = modelData.speed;
+                            if (modelData.speed === 0) {
+                                isPowerOn = false;
+                                sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "turn_off");
+                            } else {
+                                isPowerOn = true;
+                                sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "speed_" + modelData.speed);
+                            }
+                        }
+                        Rectangle { anchors.fill: parent; radius: 8 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.15 : (parent.containsMouse ? 0.06 : 0) }
+                    }
+                }
+            }
+
+            Item { Layout.fillWidth: true }
         }
     }
 
-    component HumidifierControl: Item {
+    component HumidifierControl: ColumnLayout {
         id: humidifierRoot
         property var loaderObj: null
-        property string currentDeviceId: loaderObj ? (loaderObj.currentDeviceId || "") : ""
         property bool isOn: false
 
-        width: 280 * sc; height: 580 * sc
+        spacing: 10 * sc
 
-        Rectangle {
-            anchors.fill: parent; radius: 14 * sc
-            color: "#1e222d"; border.color: Qt.rgba(129, 212, 250, 0.6)
-        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10 * sc
 
-        ColumnLayout {
-            anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top
-            anchors.topMargin: 24 * sc; spacing: 18 * sc
+            Rectangle {
+                width: 46 * sc; height: 26 * sc; radius: 13 * sc
+                color: isOn ? "#81D4FA" : "#3a3a4a"
+                border.color: isOn ? "#4FC3F7" : "#4a4a5a"
+                border.width: 2
+
+                Rectangle {
+                    x: isOn ? parent.width - height - 2 : 2
+                    y: 2
+                    width: 22 * sc; height: 22 * sc; radius: 11 * sc
+                    color: isOn ? "#ffffff" : "#888899"
+                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: loaderObj ? loaderObj.isOnline : false
+                    onClicked: {
+                        isOn = !isOn;
+                        sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", isOn ? "turn_on" : "turn_off");
+                    }
+                }
+            }
 
             Label {
-                text: "💧"; font.pixelSize: 56 * sc
-                Layout.alignment: Qt.AlignHCenter
+                text: isOn ? qsTr("● 已开启") : qsTr("○ 已关闭")
+                font.pixelSize: 13 * sc; font.weight: Font.DemiBold
+                color: isOn ? "#81D4FA" : "#90A4AE"
             }
 
-            ColumnLayout {
-                Layout.alignment: Qt.AlignHCenter; spacing: 4 * sc
+            Item { Layout.fillWidth: true }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 12 * sc
+
+            Rectangle {
+                Layout.preferredWidth: 100 * sc; Layout.preferredHeight: 40 * sc
+                radius: 10 * sc
+                color: isOn ? "#1B5E20" : "#4CAF50"
+                border.color: isOn ? "#2E7D32" : "#388E3C"
+                border.width: 1
+
                 Label {
-                    text: loaderObj ? (loaderObj.currentDeviceName || "未知设备") : "未知设备"
-                    font.pixelSize: 16 * sc; font.bold: true; color: "#b3e5fc"
-                    Layout.alignment: Qt.AlignHCenter
+                    anchors.centerIn: parent
+                    text: qsTr("开启")
+                    font.pixelSize: 15 * sc; font.bold: true
+                    color: "#ffffff"
                 }
-                Label {
-                    text: qsTr("加湿器")
-                    font.pixelSize: 11 * sc; color: "#81d4fa"
-                    Layout.alignment: Qt.AlignHCenter
-                }
-                Label {
-                    text: humidifierRoot.isOn ? qsTr("已开启") : qsTr("已关闭")
-                    font.pixelSize: 12 * sc; color: humidifierRoot.isOn ? "#4fc3f7" : "#888"
-                    Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 6 * sc
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { isOn = true; sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "turn_on"); }
+                    Rectangle { anchors.fill: parent; radius: 10 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.2 : (parent.containsMouse ? 0.08 : 0) }
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#333" }
+            Rectangle {
+                Layout.preferredWidth: 100 * sc; Layout.preferredHeight: 40 * sc
+                radius: 10 * sc
+                color: isOn ? "#C62828" : "#78909C"
+                border.color: isOn ? "#B71C1C" : "#546E7A"
+                border.width: 1
 
-            Switch {
-                id: humidifierSwitch
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 120 * sc; Layout.preferredHeight: 48 * sc
-                Component.onCompleted: checked = humidifierRoot.isOn
-                onToggled: {
-                    humidifierRoot.isOn = checked;
-                    var act = checked ? "turn_on" : "turn_off";
-                    sendDeviceCommand(humidifierRoot.currentDeviceId, act);
+                Label {
+                    anchors.centerIn: parent
+                    text: qsTr("关闭")
+                    font.pixelSize: 15 * sc; font.bold: true
+                    color: "#ffffff"
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { isOn = false; sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "turn_off"); }
+                    Rectangle { anchors.fill: parent; radius: 10 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.2 : (parent.containsMouse ? 0.08 : 0) }
                 }
             }
+
+            Item { Layout.fillWidth: true }
         }
     }
 
-    component BuzzerControl: Item {
+    component BuzzerControl: ColumnLayout {
         id: buzzerRoot
         property var loaderObj: null
-        property string currentDeviceId: loaderObj ? (loaderObj.currentDeviceId || "") : ""
         property bool isOn: false
 
-        width: 280 * sc; height: 580 * sc
+        spacing: 10 * sc
 
-        Rectangle {
-            anchors.fill: parent; radius: 14 * sc
-            color: "#1e222d"; border.color: Qt.rgba(239, 83, 80, 0.6)
-        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10 * sc
 
-        ColumnLayout {
-            anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top
-            anchors.topMargin: 24 * sc; spacing: 18 * sc
+            Rectangle {
+                width: 46 * sc; height: 26 * sc; radius: 13 * sc
+                color: isOn ? "#EF5350" : "#3a3a4a"
+                border.color: isOn ? "#E53935" : "#4a4a5a"
+                border.width: 2
+
+                Rectangle {
+                    x: isOn ? parent.width - height - 2 : 2
+                    y: 2
+                    width: 22 * sc; height: 22 * sc; radius: 11 * sc
+                    color: isOn ? "#ffffff" : "#888899"
+                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: loaderObj ? loaderObj.isOnline : false
+                    onClicked: {
+                        isOn = !isOn;
+                        sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", isOn ? "turn_on" : "turn_off");
+                    }
+                }
+            }
 
             Label {
-                text: "🔔"; font.pixelSize: 56 * sc
-                Layout.alignment: Qt.AlignHCenter
+                text: isOn ? qsTr("● 鸣响中") : qsTr("○ 静音")
+                font.pixelSize: 13 * sc; font.weight: Font.DemiBold
+                color: isOn ? "#EF5350" : "#90A4AE"
             }
 
-            ColumnLayout {
-                Layout.alignment: Qt.AlignHCenter; spacing: 4 * sc
+            Item { Layout.fillWidth: true }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 12 * sc
+
+            Rectangle {
+                Layout.preferredWidth: 100 * sc; Layout.preferredHeight: 40 * sc
+                radius: 10 * sc
+                color: isOn ? "#B71C1C" : "#EF5350"
+                border.color: isOn ? "#C62828" : "#D32F2F"
+                border.width: 1
+
                 Label {
-                    text: loaderObj ? (loaderObj.currentDeviceName || "未知设备") : "未知设备"
-                    font.pixelSize: 16 * sc; font.bold: true; color: "#ef9a9a"
-                    Layout.alignment: Qt.AlignHCenter
+                    anchors.centerIn: parent
+                    text: qsTr("鸣响")
+                    font.pixelSize: 15 * sc; font.bold: true
+                    color: "#ffffff"
                 }
-                Label {
-                    text: qsTr("蜂鸣器")
-                    font.pixelSize: 11 * sc; color: "#ef5350"
-                    Layout.alignment: Qt.AlignHCenter
-                }
-                Label {
-                    text: buzzerRoot.isOn ? qsTr("🔊 鸣响中") : qsTr("静音")
-                    font.pixelSize: 12 * sc; color: buzzerRoot.isOn ? "#ef5350" : "#888"
-                    Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 6 * sc
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { isOn = true; sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "turn_on"); }
+                    Rectangle { anchors.fill: parent; radius: 10 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.2 : (parent.containsMouse ? 0.08 : 0) }
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#333" }
+            Rectangle {
+                Layout.preferredWidth: 100 * sc; Layout.preferredHeight: 40 * sc
+                radius: 10 * sc
+                color: isOn ? "#2E7D32" : "#78909C"
+                border.color: isOn ? "#388E3C" : "#546E7A"
+                border.width: 1
 
-            Switch {
-                id: buzzerSwitch
-                Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: 120 * sc; Layout.preferredHeight: 48 * sc
-                Component.onCompleted: checked = buzzerRoot.isOn
-                onToggled: {
-                    buzzerRoot.isOn = checked;
-                    var act = checked ? "turn_on" : "turn_off";
-                    sendDeviceCommand(buzzerRoot.currentDeviceId, act);
+                Label {
+                    anchors.centerIn: parent
+                    text: qsTr("静音")
+                    font.pixelSize: 15 * sc; font.bold: true
+                    color: "#ffffff"
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { isOn = false; sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "turn_off"); }
+                    Rectangle { anchors.fill: parent; radius: 10 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.2 : (parent.containsMouse ? 0.08 : 0) }
                 }
             }
+
+            Item { Layout.fillWidth: true }
         }
     }
 
-    component MasterSwitchControl: Item {
+    component MasterSwitchControl: ColumnLayout {
         id: masterRoot
         property var loaderObj: null
-        property string currentDeviceId: loaderObj ? (loaderObj.currentDeviceId || "") : ""
         property bool isOn: false
 
-        width: 280 * sc; height: 580 * sc
+        spacing: 10 * sc
 
-        Rectangle {
-            anchors.fill: parent; radius: 14 * sc
-            color: "#1e222d"; border.color: Qt.rgba(255, 215, 64, 0.6)
-        }
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 10 * sc
 
-        ColumnLayout {
-            anchors.horizontalCenter: parent.horizontalCenter; anchors.top: parent.top
-            anchors.topMargin: 24 * sc; spacing: 18 * sc
+            Rectangle {
+                width: 46 * sc; height: 26 * sc; radius: 13 * sc
+                color: isOn ? "#FFD740" : "#3a3a4a"
+                border.color: isOn ? "#FFC107" : "#4a4a5a"
+                border.width: 2
+
+                Rectangle {
+                    x: isOn ? parent.width - height - 2 : 2
+                    y: 2
+                    width: 22 * sc; height: 22 * sc; radius: 11 * sc
+                    color: isOn ? "#ffffff" : "#888899"
+                    Behavior on x { NumberAnimation { duration: 180; easing.type: Easing.OutCubic } }
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    enabled: loaderObj ? loaderObj.isOnline : false
+                    onClicked: {
+                        isOn = !isOn;
+                        sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", isOn ? "turn_on" : "turn_off");
+                    }
+                }
+            }
 
             Label {
-                text: "⚡"; font.pixelSize: 56 * sc
-                Layout.alignment: Qt.AlignHCenter
+                text: isOn ? qsTr("● 全部开启") : qsTr("○ 全部关闭")
+                font.pixelSize: 13 * sc; font.weight: Font.DemiBold
+                color: isOn ? "#FFD740" : "#90A4AE"
             }
 
-            ColumnLayout {
-                Layout.alignment: Qt.AlignHCenter; spacing: 4 * sc
+            Item { Layout.fillWidth: true }
+        }
+
+        RowLayout {
+            Layout.fillWidth: true
+            spacing: 12 * sc
+
+            Rectangle {
+                Layout.preferredWidth: 100 * sc; Layout.preferredHeight: 40 * sc
+                radius: 10 * sc
+                color: "#4CAF50"
+                border.color: "#388E3C"
+                border.width: 1
+
                 Label {
-                    text: loaderObj ? (loaderObj.currentDeviceName || "未知设备") : "未知设备"
-                    font.pixelSize: 16 * sc; font.bold: true; color: "#ffe082"
-                    Layout.alignment: Qt.AlignHCenter
+                    anchors.centerIn: parent
+                    text: qsTr("全开")
+                    font.pixelSize: 15 * sc; font.bold: true
+                    color: "#ffffff"
                 }
-                Label {
-                    text: qsTr("全屋总控")
-                    font.pixelSize: 11 * sc; color: "#ffd740"
-                    Layout.alignment: Qt.AlignHCenter
-                }
-                Label {
-                    text: masterRoot.isOn ? qsTr("全部设备已开启") : qsTr("全部设备已关闭")
-                    font.pixelSize: 12 * sc; color: masterRoot.isOn ? "#ffd740" : "#888"
-                    Layout.alignment: Qt.AlignHCenter; Layout.topMargin: 6 * sc
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { isOn = true; sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "turn_on"); }
+                    Rectangle { anchors.fill: parent; radius: 10 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.2 : (parent.containsMouse ? 0.08 : 0) }
                 }
             }
 
-            Rectangle { Layout.fillWidth: true; Layout.preferredHeight: 1; color: "#333" }
+            Rectangle {
+                Layout.preferredWidth: 100 * sc; Layout.preferredHeight: 40 * sc
+                radius: 10 * sc
+                color: "#F44336"
+                border.color: "#D32F2F"
+                border.width: 1
 
-            RowLayout {
-                Layout.alignment: Qt.AlignHCenter; spacing: 24 * sc
-                Rectangle {
-                    width: 80 * sc; height: 80 * sc; radius: 10 * sc
-                    color: "#4caf50"
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: { masterRoot.isOn = true; sendDeviceCommand(masterRoot.currentDeviceId, "turn_on"); }
-                        Rectangle { anchors.fill: parent; radius: 10 * sc
-                            color: "#ffffff"; opacity: parent.pressed ? 0.2 : 0 }
-                    }
-                    Label { anchors.centerIn: parent; text: qsTr("全开"); color: "#ffffff"; font.pixelSize: 16 * sc; font.bold: true }
+                Label {
+                    anchors.centerIn: parent
+                    text: qsTr("全关")
+                    font.pixelSize: 15 * sc; font.bold: true
+                    color: "#ffffff"
                 }
-                Rectangle {
-                    width: 80 * sc; height: 80 * sc; radius: 10 * sc
-                    color: "#f44336"
-                    MouseArea {
-                        anchors.fill: parent
-                        onClicked: { masterRoot.isOn = false; sendDeviceCommand(masterRoot.currentDeviceId, "turn_off"); }
-                        Rectangle { anchors.fill: parent; radius: 10 * sc
-                            color: "#ffffff"; opacity: parent.pressed ? 0.2 : 0 }
-                    }
-                    Label { anchors.centerIn: parent; text: qsTr("全关"); color: "#ffffff"; font.pixelSize: 16 * sc; font.bold: true }
+
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    cursorShape: Qt.PointingHandCursor
+                    onClicked: { isOn = false; sendDeviceCommand(loaderObj ? loaderObj.currentDeviceId : "", "turn_off"); }
+                    Rectangle { anchors.fill: parent; radius: 10 * sc; color: "#ffffff"; opacity: parent.pressed ? 0.2 : (parent.containsMouse ? 0.08 : 0) }
                 }
             }
+
+            Item { Layout.fillWidth: true }
         }
     }
 

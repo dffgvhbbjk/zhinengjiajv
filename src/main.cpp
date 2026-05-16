@@ -18,7 +18,7 @@
 #include "utils/locationservice.h"
 #include "utils/networkmanager.h"
 #include "utils/voicecontroller.h"
-#include "utils/remotevideoimageprovider.h"
+#include "utils/videorendertarget.h"
 
 namespace Protocol
 {
@@ -38,29 +38,13 @@ int main(int argc, char *argv[])
 
     QQmlApplicationEngine engine;
 
-    auto *videoProvider = new RemoteVideoImageProvider();
-    engine.addImageProvider(QLatin1String("remotevideo"), videoProvider);
+    qmlRegisterType<VideoRenderTarget>("zhinengjiajv", 1, 0, "VideoRenderTarget");
 
     auto *udpDiscoverer = new UdpDiscoverer(&engine);
     qmlRegisterSingletonInstance("zhinengjiajv", 1, 0, "UdpDiscoverer", udpDiscoverer);
 
     auto *tcpController = new TcpController(&engine);
     qmlRegisterSingletonInstance("zhinengjiajv", 1, 0, "TcpController", tcpController);
-
-    QObject::connect(tcpController, &TcpController::videoFrameReceived,
-                     [videoProvider](const QString &base64Data, int width, int height, qint64 timestamp)
-                     {
-        Q_UNUSED(width);
-        Q_UNUSED(height);
-        Q_UNUSED(timestamp);
-        videoProvider->updateFrame(base64Data); });
-
-    QObject::connect(tcpController, &TcpController::rawVideoFrameReceived,
-                     [videoProvider](const QByteArray &jpegData, int width, int height)
-                     {
-        Q_UNUSED(width);
-        Q_UNUSED(height);
-        videoProvider->updateRawFrame(jpegData); });
 
     auto *databaseManager = DatabaseManager::instance();
     qmlRegisterSingletonInstance("zhinengjiajv", 1, 0, "DatabaseManager", databaseManager);
@@ -166,6 +150,41 @@ int main(int argc, char *argv[])
             databaseManager->setDeviceOnline(deviceId, true);
         } });
 
+    QObject::connect(tcpController, &TcpController::gatewayDeviceListReceived,
+                     databaseManager, [databaseManager, deviceModel](const QString &gatewayId, const QVariantList &devices)
+                     {
+        Q_UNUSED(gatewayId);
+        QString gwIp = gatewayId;
+        int gwPort = 9999;
+
+        for (const QVariant &devVar : devices)
+        {
+            QVariantMap dev = devVar.toMap();
+            QString devId = dev.value("device_id").toString();
+            QString devName = dev.value("name").toString();
+            QString devCategory = dev.value("category").toString();
+            QString ip = dev.value("ip", gwIp).toString();
+            int port = dev.value("tcp_port", gwPort).toInt();
+            QString fw = dev.value("firmware_version").toString();
+
+            QVariantMap existing = databaseManager->getDevice(devId);
+            if (existing.isEmpty())
+            {
+                databaseManager->addDevice(devId, devName, devCategory, ip, port, fw);
+            }
+            else
+            {
+                databaseManager->updateDevice(devId, QVariantMap{
+                    {"device_name", devName},
+                    {"device_type", devCategory},
+                    {"ip", ip},
+                    {"tcp_port", port}
+                });
+            }
+        }
+        deviceModel->load();
+    });
+
     QObject::connect(udpDiscoverer, &UdpDiscoverer::dataReceived,
                      databaseManager, [databaseManager](const QString &deviceId, const QVariantMap &data)
                      {
@@ -182,8 +201,19 @@ int main(int argc, char *argv[])
                                        light, rain, smoke, lpg, air_quality, pressure); });
 
     QObject::connect(udpDiscoverer, &UdpDiscoverer::sensorFieldUpdated,
-                     databaseManager, [databaseManager](const QString &deviceId, const QString &field, double value)
+                     databaseManager, [databaseManager](const QString &deviceId, const QString &field, double value, qint64 version)
                      { databaseManager->updateSensorField(deviceId, field, value); });
+
+    QObject::connect(udpDiscoverer, &UdpDiscoverer::sensorFieldUpdated,
+                     tcpController, [tcpController](const QString &deviceId, const QString &field, double value, qint64 version)
+                     {
+        Q_UNUSED(field);
+        Q_UNUSED(value);
+        if (version > 0)
+        {
+            tcpController->updateDeviceStateVersion(deviceId, version);
+        }
+    });
 
     QObject::connect(udpDiscoverer, &UdpDiscoverer::deviceOffline,
                      databaseManager, [databaseManager](const QString &deviceId)
@@ -197,9 +227,24 @@ int main(int argc, char *argv[])
                      sceneTriggerEngine, [sceneTriggerEngine](const QString &deviceId, const QVariantMap &data)
                      { sceneTriggerEngine->onSensorDataReceived(deviceId, data); });
 
+    QObject::connect(udpDiscoverer, &UdpDiscoverer::sensorFieldUpdated,
+                     sceneTriggerEngine, [sceneTriggerEngine](const QString &deviceId, const QString &field, double value, qint64 version)
+                     {
+        Q_UNUSED(version);
+        sceneTriggerEngine->onSensorFieldUpdated(deviceId, field, value);
+    });
+
     QObject::connect(tcpController, &TcpController::deviceControlled,
                      sceneTriggerEngine, [sceneTriggerEngine](const QString &deviceId, const QString &action)
                      { sceneTriggerEngine->onDeviceStateChanged(deviceId, action); });
+
+    QObject::connect(tcpController, &TcpController::deviceStateUpdated,
+                     tcpController, [tcpController](const QString &deviceId, const QString &state)
+                     {
+        Q_UNUSED(state);
+        qint64 now = QDateTime::currentMSecsSinceEpoch();
+        tcpController->updateDeviceStateVersion(deviceId, now);
+    });
 
     QObject::connect(weatherService, &WeatherService::weatherFetched,
                      sceneTriggerEngine, [sceneTriggerEngine, weatherService]()

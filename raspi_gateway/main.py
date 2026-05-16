@@ -44,6 +44,18 @@ _REVERSE_ACTIONS = {
     "start": "stop", "stop": "start",
 }
 
+def _value_to_state(value: int) -> str:
+    """Convert STM32 frame value byte to a human-readable state string."""
+    if value is None:
+        return ""
+    if value == 0x00:
+        return "off"
+    if value == 0x01:
+        return "on"
+    if 0x01 <= value <= 0x64:
+        return f"on:{value}"
+    return f"raw:{value:#04x}"
+
 # ---- 全局组件 ----------------------------------------------------------
 cmd_serial: Optional[SerialManager] = None
 sensor_serial: Optional[SerialManager] = None
@@ -55,6 +67,8 @@ _pending_command_ids = deque(maxlen=200)
 _command_id_lock = threading.Lock()
 _REVERSE_LOOKUP = {}
 _last_timeout_check = 0.0
+_device_state_version = {}
+_device_state_version_lock = threading.Lock()
 
 
 def _build_reverse_lookup() -> dict:
@@ -67,8 +81,12 @@ def _build_reverse_lookup() -> dict:
 
 
 def _build_sensor_refresh_pkt() -> str:
-    """构建传感器数据 JSON 包（供 UDP data_refresh_request 使用）"""
-    cache = sensor_serial.get_sensor_cache() if sensor_serial else {}
+    """构建传感器数据 JSON 包（供 UDP data_refresh_request 使用），串口不可用或无数据时返回 None"""
+    if sensor_serial is None or not sensor_serial.is_open():
+        return None
+    cache = sensor_serial.get_sensor_cache()
+    if not cache:
+        return None
     return build_sensor_packet(
         temperature=cache.get("temperature", 0.0),
         humidity=cache.get("humidity", 0.0),
@@ -186,8 +204,8 @@ def handle_tcp_command(json_cmd: dict):
         return None
 
     elif msg_type == "schedule":
-        command_id = json_cmd.get("commandId", "")
-        tcp.send_response(build_schedule_ack(command_id))
+        schedule_id = json_cmd.get("scheduleId", json_cmd.get("commandId", ""))
+        tcp.send_response(build_schedule_ack(schedule_id))
         logger.info(f"SCHEDULE: {json_cmd.get('data', '')[:50]}...")
         return None
 
@@ -220,7 +238,13 @@ def _handle_control(json_cmd: dict):
         frames = dispatcher.dispatch(json_cmd)
         cmd_id = json_cmd.get("commandId", "")
         dev_id = json_cmd.get("device", "")
+        action = json_cmd.get("action", "")
         now = time.monotonic()
+
+        with _device_state_version_lock:
+            new_version = int(time.time() * 1000)
+            _device_state_version[dev_id] = new_version
+
         for frame in frames:
             cmd_serial.send_frame(frame)
         with _command_id_lock:
@@ -228,8 +252,10 @@ def _handle_control(json_cmd: dict):
                 _pending_command_ids.append({
                     "commandId": cmd_id,
                     "device_id": dev_id,
+                    "action": action,
                     "is_last_frame": i == len(frames) - 1,
                     "timestamp": now,
+                    "version": new_version,
                 })
         logger.info(f"CTRL → {json_cmd['device']}.{json_cmd['action']} "
                     f"({len(frames)} 帧)")
@@ -305,7 +331,7 @@ def _handle_scene(json_cmd: dict):
             except Exception as send_err:
                 logger.error(f"SCENE 帧发送失败 (第{i + 1}/{frame_count}帧, "
                              f"设备={dev_id}, 动作={action}): {send_err}")
-                _rollback_scene_frames(succeeded)
+                _rollback_scene_frames(succeeded, scene_cmd_id)
                 return build_cmd_response(
                     scene_cmd_id, success=False,
                     msg=f"场景部分失败: 已执行{len(succeeded)}/{frame_count}帧, "
@@ -318,8 +344,8 @@ def _handle_scene(json_cmd: dict):
             json_cmd.get("commandId", ""), success=False, msg=str(e))
 
 
-def _rollback_scene_frames(succeeded: list):
-    """回滚已发送的场景帧，发送反向命令"""
+def _rollback_scene_frames(succeeded: list, command_id: str = ""):
+    """回滚已发送的场景帧，发送反向命令并清理待响应队列"""
     if not succeeded:
         return
     logger.warning(f"SCENE_ROLLBACK: 正在回滚 {len(succeeded)} 个已执行操作...")
@@ -338,7 +364,16 @@ def _rollback_scene_frames(succeeded: list):
             logger.info(f"SCENE_ROLLBACK: 设备={dev_id} {action}→{reverse_action} 已回滚")
         except Exception as e:
             logger.error(f"SCENE_ROLLBACK: 设备={dev_id} 回滚失败 ({action}→{reverse_action}): {e}")
-    logger.warning(f"SCENE_ROLLBACK: 回滚完成 ({rolled_back}/{len(succeeded)} 成功)")
+
+    with _command_id_lock:
+        before = len(_pending_command_ids)
+        _pending_command_ids = deque(
+            [e for e in _pending_command_ids if e.get("commandId") != command_id],
+            maxlen=200
+        )
+        removed = before - len(_pending_command_ids)
+    logger.warning(f"SCENE_ROLLBACK: 回滚完成 ({rolled_back}/{len(succeeded)} 成功), "
+                   f"已清理 {removed} 条待响应记录")
 
 
 def _handle_data_refresh():
@@ -361,9 +396,28 @@ def _handle_data_refresh():
 
 
 def _handle_hello():
-    """Hello 握手响应"""
+    """Hello 握手响应 — 附带网关设备列表（含支持的动作）"""
     from protocol.checksum import compute_checksum
     camera_available = video is not None and video.is_camera_available()
+    device_list = []
+    for dev_id, dev_info in DEVICE_REGISTRY.items():
+        entry = {
+            "device_id": dev_id,
+            "name": dev_info.get("name", dev_id),
+            "category": dev_info.get("category", "unknown"),
+            "zone": dev_info.get("zone"),
+            "dev_type": dev_info.get("dev_type"),
+            "dev_index": dev_info.get("dev_index"),
+        }
+        if dev_info.get("actions"):
+            entry["actions"] = dev_info["actions"]
+        if dev_info.get("brightness_range"):
+            entry["brightness_range"] = dev_info["brightness_range"]
+        if dev_info.get("dual_frame"):
+            entry["zone2"] = dev_info.get("zone2")
+            entry["dev_type2"] = dev_info.get("dev_type2")
+            entry["dev_index2"] = dev_info.get("dev_index2")
+        device_list.append(entry)
     resp = {
         "type": "command_response",
         "commandId": "hello",
@@ -371,6 +425,7 @@ def _handle_hello():
         "message": "connected",
         "camera": camera_available,
         "videoPort": 9998,
+        "devices": device_list,
     }
     resp["checksum"] = compute_checksum(resp)
     return json.dumps(resp, separators=(",", ":"), ensure_ascii=False)
@@ -382,7 +437,10 @@ def _handle_hello():
 
 def handle_sensor_data(field: str, value: float):
     sensor_device_id = SENSOR_DEVICE_MAP.get(field, GATEWAY_ID)
-    pkt = build_sensor_update_packet(device_id=sensor_device_id, field=field, value=value)
+    with _device_state_version_lock:
+        new_version = int(time.time() * 1000)
+        _device_state_version[sensor_device_id] = new_version
+    pkt = build_sensor_update_packet(device_id=sensor_device_id, field=field, value=value, version=new_version)
     udp.broadcast_raw(pkt)
 
 
@@ -390,6 +448,7 @@ def handle_cmd_response(parsed: dict):
     zone = parsed.get("zone")
     dev_type = parsed.get("dev_type")
     dev_index = parsed.get("dev_index")
+    value = parsed.get("value")
     frame_dev_id = _REVERSE_LOOKUP.get((zone, dev_type, dev_index))
 
     with _command_id_lock:
@@ -402,15 +461,27 @@ def handle_cmd_response(parsed: dict):
     cid = entry.get("commandId", "")
     expected_dev = entry.get("device_id", "")
     is_last = entry.get("is_last_frame", True)
+    version = entry.get("version", 0)
 
     if frame_dev_id and expected_dev and frame_dev_id != expected_dev:
         logger.warning(f"CMD_RSP 设备不匹配: 期望={expected_dev} 实际={frame_dev_id} zone={zone:#04x}")
 
+    with _device_state_version_lock:
+        new_version = int(time.time() * 1000)
+        _device_state_version[frame_dev_id or expected_dev] = new_version
+
+    device_state = _value_to_state(value) if value is not None else ""
+
     if cid and tcp.is_connected():
         if is_last:
-            resp = build_cmd_response(cid, success=True)
+            resp = build_cmd_response(
+                cid, success=True, 
+                device_id=frame_dev_id or expected_dev,
+                device_state=device_state,
+                version=new_version)
             tcp.send_response(resp)
-            logger.info(f"CMD_RSP → TCP commandId={cid} device={frame_dev_id or expected_dev} (final)")
+            logger.info(f"CMD_RSP → TCP commandId={cid} device={frame_dev_id or expected_dev} "
+                       f"state={device_state} version={new_version} (final)")
         else:
             logger.info(f"CMD_RSP device={frame_dev_id or expected_dev} (intermediate, waiting for more)")
 
@@ -451,10 +522,12 @@ def _check_command_timeouts():
 
     for entry in expired:
         cid = entry.get("commandId", "")
+        dev_id = entry.get("device_id", "")
         if cid and tcp and tcp.is_connected():
-            resp = build_cmd_response(cid, success=False, msg="串口响应超时")
+            resp = build_cmd_response(cid, success=False, msg="串口响应超时",
+                                     device_id=dev_id)
             tcp.send_response(resp)
-            logger.warning(f"CMD_TIMEOUT commandId={cid} device={entry.get('device_id', '')}")
+            logger.warning(f"CMD_TIMEOUT commandId={cid} device={dev_id}")
 
 
 # ============================================================

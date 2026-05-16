@@ -27,6 +27,9 @@ public:
     // 外部调用：传感器数据到达时触发检查
     Q_INVOKABLE void onSensorDataReceived(const QString &deviceId, const QVariantMap &sensorData);
 
+    // 外部调用：单字段传感器更新
+    Q_INVOKABLE void onSensorFieldUpdated(const QString &deviceId, const QString &field, double value);
+
     // 外部调用：设备状态变化时触发检查
     Q_INVOKABLE void onDeviceStateChanged(const QString &deviceId, const QString &action);
 

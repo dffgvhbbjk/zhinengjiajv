@@ -2,10 +2,8 @@
 FF/FE 6字节定长帧解析器 — 区分控制帧与传感器帧
 """
 
-from config import SENSOR_TYPE_MAP, SENSOR_DIVIDE_BY_1000
+from config import SENSOR_TYPE_MAP, SENSOR_DIVIDE_BY_1000, FRAME_HEAD, FRAME_TAIL
 
-FRAME_HEAD = 0xFF
-FRAME_TAIL = 0xFE
 FRAME_LEN = 6
 
 CONTROL_ZONES = {0x01, 0x02}

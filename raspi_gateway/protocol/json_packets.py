@@ -42,25 +42,35 @@ def build_sensor_packet(device_id=GATEWAY_ID, temperature=0.0, humidity=0.0,
     return json.dumps(pkt, separators=(",", ":"), ensure_ascii=False)
 
 
-def build_sensor_update_packet(device_id: str, field: str, value: float) -> str:
+def build_sensor_update_packet(device_id: str, field: str, value: float, version: int = 0) -> str:
     pkt = {
         "type": "sensor_update",
         "device_id": device_id,
         "field": field,
         "value": value,
     }
+    if version > 0:
+        pkt["version"] = version
     pkt["checksum"] = compute_checksum(pkt)
     return json.dumps(pkt, separators=(",", ":"), ensure_ascii=False)
 
 
 def build_cmd_response(command_id: str, success: bool = True,
-                       msg: str = "ok") -> str:
+                       msg: str = "ok", device_id: str = "",
+                       device_state: str = "",
+                       version: int = 0) -> str:
     pkt = {
         "type": "command_response",
         "commandId": command_id,
         "status": "success" if success else "failed",
         "message": msg,
     }
+    if device_id:
+        pkt["device_id"] = device_id
+    if device_state:
+        pkt["device_state"] = device_state
+    if version > 0:
+        pkt["version"] = version
     pkt["checksum"] = compute_checksum(pkt)
     return json.dumps(pkt, separators=(",", ":"), ensure_ascii=False)
 

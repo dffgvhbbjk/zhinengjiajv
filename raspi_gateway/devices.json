@@ -1,0 +1,159 @@
+{
+    "devices": {
+        "door_01": {
+            "zone": "0x01",
+            "dev_type": "0x24",
+            "dev_index": "0x01",
+            "name": "1号门",
+            "category": "door",
+            "actions": ["open", "close", "turn_on", "turn_off"]
+        },
+        "door_02": {
+            "zone": "0x01",
+            "dev_type": "0x24",
+            "dev_index": "0x02",
+            "name": "2号门",
+            "category": "door",
+            "actions": ["open", "close", "turn_on", "turn_off"]
+        },
+        "door_03": {
+            "zone": "0x01",
+            "dev_type": "0x24",
+            "dev_index": "0x03",
+            "name": "3号门",
+            "category": "door",
+            "actions": ["open", "close", "turn_on", "turn_off"]
+        },
+        "fan_01": {
+            "zone": "0x01",
+            "dev_type": "0x22",
+            "dev_index": "0x01",
+            "name": "风扇",
+            "category": "fan",
+            "actions": ["turn_on", "turn_off", "speed_1", "speed_2", "speed_3"]
+        },
+        "humidifier_01": {
+            "zone": "0x01",
+            "dev_type": "0x36",
+            "dev_index": "0x00",
+            "name": "加湿器",
+            "category": "humidifier",
+            "actions": ["turn_on", "turn_off"]
+        },
+        "buzzer_01": {
+            "zone": "0x01",
+            "dev_type": "0x37",
+            "dev_index": "0x00",
+            "name": "蜂鸣器",
+            "category": "buzzer",
+            "actions": ["turn_on", "turn_off"]
+        },
+        "light_all": {
+            "zone": "0x02",
+            "dev_type": "0x00",
+            "dev_index": "0x10",
+            "name": "全屋灯",
+            "category": "light",
+            "actions": ["turn_on", "turn_off", "brightness"],
+            "brightness_range": [0, 100]
+        },
+        "light_entry": {
+            "zone": "0x02",
+            "dev_type": "0x00",
+            "dev_index": "0x11",
+            "name": "入户灯",
+            "category": "light",
+            "actions": ["turn_on", "turn_off", "brightness"],
+            "brightness_range": [0, 100]
+        },
+        "light_living": {
+            "zone": "0x02",
+            "dev_type": "0x00",
+            "dev_index": "0x12",
+            "name": "客厅灯",
+            "category": "light",
+            "actions": ["turn_on", "turn_off", "brightness"],
+            "brightness_range": [0, 100]
+        },
+        "light_kitchen": {
+            "zone": "0x02",
+            "dev_type": "0x00",
+            "dev_index": "0x13",
+            "name": "厨房灯",
+            "category": "light",
+            "actions": ["turn_on", "turn_off", "brightness"],
+            "brightness_range": [0, 100]
+        },
+        "light_bathroom": {
+            "zone": "0x02",
+            "dev_type": "0x00",
+            "dev_index": "0x14",
+            "name": "卫浴灯",
+            "category": "light",
+            "actions": ["turn_on", "turn_off", "brightness"],
+            "brightness_range": [0, 100]
+        },
+        "light_bedroom": {
+            "zone": "0x02",
+            "dev_type": "0x00",
+            "dev_index": "0x15",
+            "name": "卧室灯",
+            "category": "light",
+            "actions": ["turn_on", "turn_off", "brightness"],
+            "brightness_range": [0, 100]
+        },
+        "light_piano": {
+            "zone": "0x02",
+            "dev_type": "0x00",
+            "dev_index": "0x16",
+            "name": "钢琴室灯",
+            "category": "light",
+            "actions": ["turn_on", "turn_off", "brightness"],
+            "brightness_range": [0, 100]
+        },
+        "master_switch": {
+            "zone": "0x01",
+            "dev_type": "0x11",
+            "dev_index": "0x11",
+            "zone2": "0x02",
+            "dev_type2": "0x22",
+            "dev_index2": "0x11",
+            "name": "全屋总控",
+            "category": "master_switch",
+            "actions": ["turn_on", "turn_off"],
+            "dual_frame": true
+        }
+    },
+    "action_value_map": {
+        "door": {
+            "open": 1,
+            "close": 0,
+            "turn_on": 1,
+            "turn_off": 0
+        },
+        "fan": {
+            "turn_on": 1,
+            "turn_off": 0,
+            "speed_1": 1,
+            "speed_2": 2,
+            "speed_3": 3
+        },
+        "humidifier": {
+            "turn_on": 1,
+            "turn_off": 0
+        },
+        "buzzer": {
+            "turn_on": 1,
+            "turn_off": 0
+        },
+        "light": {
+            "turn_on": 1,
+            "turn_off": 0,
+            "brightness": "param:0:100"
+        },
+        "master_switch": {
+            "turn_on": 1,
+            "turn_off": 0
+        }
+    }
+}

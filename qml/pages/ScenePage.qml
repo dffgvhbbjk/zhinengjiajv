@@ -49,23 +49,30 @@ Page {
         var scenes = [];
         var count = SceneModel.count;
         for (var i = 0; i < count; i++) {
-            scenes.push({
-                "sceneId": SceneModel.data(SceneModel.index(i, 0), SceneModel.SceneIdRole) || "",
-                "sceneName": SceneModel.data(SceneModel.index(i, 0), SceneModel.SceneNameRole) || "",
-                "triggerType": SceneModel.data(SceneModel.index(i, 0), SceneModel.TriggerTypeRole) || "manual",
-                "triggerDeviceId": SceneModel.data(SceneModel.index(i, 0), SceneModel.TriggerDeviceIdRole) || "",
-                "actions": SceneModel.data(SceneModel.index(i, 0), SceneModel.ActionsRole) || "",
-                "isEnabled": SceneModel.data(SceneModel.index(i, 0), SceneModel.IsEnabledRole),
-                "effectiveCount": SceneModel.data(SceneModel.index(i, 0), SceneModel.EffectiveCountRole) || 0,
-                "lastExecutedAt": SceneModel.data(SceneModel.index(i, 0), SceneModel.LastExecutedAtRole) || "",
-                "sceneStatus": SceneModel.data(SceneModel.index(i, 0), SceneModel.SceneStatusRole) || 0
-            });
+scenes.push({
+                    "sceneId": SceneModel.data(SceneModel.index(i, 0), SceneModel.SceneIdRole) || "",
+                    "sceneName": SceneModel.data(SceneModel.index(i, 0), SceneModel.SceneNameRole) || "",
+                    "triggerType": SceneModel.data(SceneModel.index(i, 0), SceneModel.TriggerTypeRole) || "manual",
+                    "triggerDeviceId": SceneModel.data(SceneModel.index(i, 0), SceneModel.TriggerDeviceIdRole) || "",
+                    "triggerSensorData": SceneModel.data(SceneModel.index(i, 0), SceneModel.TriggerSensorDataRole) || "",
+                    "triggerTime": SceneModel.data(SceneModel.index(i, 0), SceneModel.TriggerTimeRole) || "",
+                    "actions": SceneModel.data(SceneModel.index(i, 0), SceneModel.ActionsRole) || "",
+                    "actionDevices": SceneModel.data(SceneModel.index(i, 0), SceneModel.ActionDevicesRole) || "",
+                    "isEnabled": SceneModel.data(SceneModel.index(i, 0), SceneModel.IsEnabledRole),
+                    "effectiveCount": SceneModel.data(SceneModel.index(i, 0), SceneModel.EffectiveCountRole) || 0,
+                    "lastExecutedAt": SceneModel.data(SceneModel.index(i, 0), SceneModel.LastExecutedAtRole) || "",
+                    "sceneStatus": SceneModel.data(SceneModel.index(i, 0), SceneModel.SceneStatusRole) || 0
+                });
         }
         root.sceneDataList = scenes;
         _refreshing = false;
     }
 
     function executeScene(sceneId, sceneName) {
+        if (!TcpController.isConnected()) {
+            toast.show(qsTr("未连接网关，无法执行场景"));
+            return;
+        }
         if (_executingSceneId !== "") return;
         var cmdId = "scene_" + new Date().getTime();
         _executingSceneId = sceneId; _executionProgress = 0.0;

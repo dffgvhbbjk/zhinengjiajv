@@ -38,8 +38,10 @@ qt_add_executable(appzhinengjiajv
     src/utils/locationservice.cpp
     src/utils/networkmanager.h
     src/utils/networkmanager.cpp
-    src/utils/voicecontroller.h
+src/utils/voicecontroller.h
     src/utils/voicecontroller.cpp
+    src/utils/videorendertarget.h
+    src/utils/videorendertarget.cpp
     src/communication/udpdiscoverer.h
     src/communication/udpdiscoverer.cpp
     src/communication/tcpcontroller.h

@@ -273,6 +273,7 @@ bool UdpDiscoverer::handleSensorUpdatePacket(const QJsonObject &jsonObj)
     QString deviceId = JsonUtils::extractDeviceId(jsonObj);
     QString field = JsonUtils::getValue(jsonObj, QStringLiteral("field"));
     double value = JsonUtils::getDoubleValue(jsonObj, QStringLiteral("value"), 0.0);
+    qint64 version = JsonUtils::getIntValue(jsonObj, QStringLiteral("version"), 0);
 
     if (deviceId.isEmpty() || field.isEmpty())
     {
@@ -283,7 +284,7 @@ bool UdpDiscoverer::handleSensorUpdatePacket(const QJsonObject &jsonObj)
     updateDeviceLastSeen(deviceId);
     DatabaseManager::instance()->setDeviceOnline(deviceId, true);
 
-    emit sensorFieldUpdated(deviceId, field, value);
+    emit sensorFieldUpdated(deviceId, field, value, version);
     return true;
 }
 

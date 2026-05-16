@@ -96,22 +96,26 @@ Page {
         }
 
         function onVideoFrameReceived(base64Data, width, height, timestamp) {
-            _frameCounter++;
-            _remoteStreamActive = true;
-            remoteVideo.source = "";
-            remoteVideo.source = "image://remotevideo/frame_" + _frameCounter + "_" + timestamp;
+            remoteVideo.updateBase64Frame(base64Data)
         }
 
         function onRawVideoFrameReceived(jpegData, width, height) {
-            _frameCounter++;
-            _remoteStreamActive = true;
-            remoteVideo.source = "";
-            remoteVideo.source = "image://remotevideo/raw_" + _frameCounter + "_" + Date.now();
+            remoteVideo.updateRawFrame(jpegData)
         }
 
         function onCameraStreamToggled(enabled) {
-            if (!enabled)
+            if (!enabled) {
                 _remoteStreamActive = false;
+                remoteVideo.clearFrame()
+            }
+        }
+    }
+
+    Connections {
+        target: remoteVideo
+        function onFrameReceived() {
+            _frameCounter++;
+            _remoteStreamActive = true;
         }
     }
 
@@ -149,12 +153,9 @@ Page {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
 
-                    Image {
+                    VideoRenderTarget {
                         id: remoteVideo
                         anchors.fill: parent
-                        fillMode: Image.PreserveAspectCrop
-                        cache: false
-                        asynchronous: true
                         visible: true
                     }
 

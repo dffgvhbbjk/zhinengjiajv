@@ -1,0 +1,24 @@
+{
+    "sensor_type_map": {
+        "0x30": "air_quality",
+        "0x31": "smoke",
+        "0x32": "lpg",
+        "0x33": "rain",
+        "0x34": "light",
+        "0x14": "pressure",
+        "0x15": "temperature",
+        "0x16": "humidity"
+    },
+    "sensor_divide_by_1000": ["0x30", "0x31", "0x32", "0x14", "0x15", "0x16"],
+    "sensor_direct": ["0x33", "0x34"],
+    "sensor_device_map": {
+        "temperature": "sensor_temp_hum",
+        "humidity": "sensor_temp_hum",
+        "light": "sensor_light_rain",
+        "rain": "sensor_light_rain",
+        "smoke": "sensor_gas",
+        "lpg": "sensor_gas",
+        "air_quality": "sensor_air",
+        "pressure": "sensor_pressure"
+    }
+}

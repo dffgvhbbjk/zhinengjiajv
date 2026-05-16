@@ -44,7 +44,7 @@ signals:
 
     void dataReceived(const QString &deviceId, const QVariantMap &data);
 
-    void sensorFieldUpdated(const QString &deviceId, const QString &field, double value);
+    void sensorFieldUpdated(const QString &deviceId, const QString &field, double value, qint64 version);
 
     void deviceOffline(const QString &deviceId);
 

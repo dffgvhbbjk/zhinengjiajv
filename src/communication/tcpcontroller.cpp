@@ -15,7 +15,7 @@
 #include <QFileInfo>
 #include <QDateTime>
 
-static constexpr int CAMERA_WIDTH = 480;
+static constexpr int CAMERA_WIDTH = 640;
 static constexpr int CAMERA_HEIGHT = 360;
 
 TcpController::TcpController(QObject *parent)
@@ -528,6 +528,13 @@ void TcpController::processCommandQueue()
         return;
     }
 
+    purgeStaleCommands();
+
+    if (m_commandQueue.isEmpty())
+    {
+        return;
+    }
+
     sortCommandQueue();
     m_currentCommand = m_commandQueue.takeFirst();
     sendCommand(m_currentCommand);
@@ -619,10 +626,14 @@ void TcpController::handleIncomingData(const QByteArray &data)
     {
         handleFirmwareResponse(jsonObj);
     }
-    else if (msgType == QStringLiteral("heartbeat_ack"))
+else if (msgType == QStringLiteral("heartbeat_ack"))
     {
         m_heartbeatTimeout->stop();
         qDebug() << "TcpController: Heartbeat acknowledged";
+    }
+    else if (msgType == QStringLiteral("device_status"))
+    {
+        handleDeviceStatusPacket(jsonObj);
     }
     else if (msgType == QStringLiteral("video_frame"))
     {
@@ -668,19 +679,56 @@ void TcpController::handleCommandResponse(const QJsonObject &jsonObj)
         {
             qDebug() << "TcpController: Video stream already connected";
         }
+
+        if (jsonObj.contains(QStringLiteral("devices")))
+        {
+            QVariantList deviceList;
+            QJsonArray devicesArr = jsonObj.value(QStringLiteral("devices")).toArray();
+            for (const QJsonValue &devVal : devicesArr)
+            {
+                if (devVal.isObject())
+                {
+                    QVariantMap devMap = devVal.toObject().toVariantMap();
+                    deviceList.append(devMap);
+                }
+            }
+            if (!deviceList.isEmpty())
+            {
+                qDebug() << "TcpController: Received" << deviceList.size() << "devices from gateway";
+                emit gatewayDeviceListReceived(m_targetIp, deviceList);
+            }
+        }
+
+        return;
     }
 
     if (status == QStringLiteral("success"))
     {
-        if (commandId != QStringLiteral("hello"))
+        if (!m_currentCommand.isEmpty() && m_currentCommand.contains(QStringLiteral("device")) && m_currentCommand.contains(QStringLiteral("action")))
         {
-            if (m_currentCommand.contains(QStringLiteral("device")) && m_currentCommand.contains(QStringLiteral("action")))
+            QString deviceId = m_currentCommand.value(QStringLiteral("device")).toString();
+            QString action = m_currentCommand.value(QStringLiteral("action")).toString();
+
+            QString deviceState = JsonUtils::getValue(jsonObj, QStringLiteral("device_state"));
+            if (!deviceState.isEmpty())
             {
-                emit deviceControlled(m_currentCommand.value(QStringLiteral("device")).toString(),
-                                      m_currentCommand.value(QStringLiteral("action")).toString());
+                emit deviceStateUpdated(deviceId, deviceState);
             }
-            emit commandSuccess(commandId, message);
+
+            qint64 cmdTimestamp = m_currentCommand.value(QStringLiteral("timestamp")).toLongLong();
+            qint64 latestVersion = m_deviceStateVersion.value(deviceId, 0);
+            if (latestVersion > cmdTimestamp)
+            {
+                qDebug() << "TcpController: Command response for" << deviceId
+                         << "is stale (sensor version" << latestVersion << "> cmd timestamp" << cmdTimestamp
+                         << "), skipping deviceControlled signal";
+            }
+            else
+            {
+                emit deviceControlled(deviceId, action);
+            }
         }
+        emit commandSuccess(commandId, message);
     }
     else
     {
@@ -936,7 +984,7 @@ void TcpController::onVideoReadyRead()
 
         qint64 now = QDateTime::currentMSecsSinceEpoch();
         qint64 elapsed = now - m_lastVideoFrameEmitTime;
-        if (elapsed >= MinVideoFrameIntervalUs)
+        if (elapsed >= MinVideoFrameIntervalMs)
         {
             m_lastVideoFrameEmitTime = now;
             if (m_videoFrameSkipCount > 0)
@@ -961,4 +1009,83 @@ void TcpController::onVideoErrorOccurred(QAbstractSocket::SocketError socketErro
 {
     Q_UNUSED(socketError)
     qDebug() << "TcpController: Video stream error:" << m_videoTcpSocket->errorString();
+}
+
+void TcpController::handleDeviceStatusPacket(const QJsonObject &jsonObj)
+{
+    QString deviceId = JsonUtils::extractDeviceId(jsonObj);
+    QString state = JsonUtils::getValue(jsonObj, QStringLiteral("state"));
+
+    if (deviceId.isEmpty() || state.isEmpty())
+    {
+        qDebug() << "TcpController: Invalid device_status packet";
+        return;
+    }
+
+    qint64 version = JsonUtils::getIntValue(jsonObj, QStringLiteral("version"), 0);
+    if (version > 0)
+    {
+        qint64 &currentVersion = m_deviceStateVersion[deviceId];
+        if (version > currentVersion)
+        {
+            currentVersion = version;
+        }
+    }
+
+    emit deviceStateUpdated(deviceId, state);
+    qDebug() << "TcpController: Device status received -" << deviceId << "state:" << state << "version:" << version;
+}
+
+void TcpController::purgeStaleCommands()
+{
+    qint64 now = QDateTime::currentMSecsSinceEpoch();
+    QList<QVariantMap> remaining;
+
+    for (const QVariantMap &cmd : m_commandQueue)
+    {
+        if (!isCommandStale(cmd))
+        {
+            remaining.append(cmd);
+        }
+        else
+        {
+            QString commandId = cmd.value(QStringLiteral("commandId")).toString();
+            qint64 age = now - cmd.value(QStringLiteral("timestamp")).toLongLong();
+            qDebug() << "TcpController: Purging stale command" << commandId
+                     << "age:" << age << "ms (threshold:" << CommandStalenessThresholdMs << "ms)";
+            emit commandFailed(commandId, QStringLiteral("Command timed out in queue"));
+        }
+    }
+
+    if (remaining.size() != m_commandQueue.size())
+    {
+        qDebug() << "TcpController: Purged" << (m_commandQueue.size() - remaining.size())
+                 << "stale commands from queue";
+        m_commandQueue = remaining;
+    }
+}
+
+bool TcpController::isCommandStale(const QVariantMap &command) const
+{
+    qint64 timestamp = command.value(QStringLiteral("timestamp")).toLongLong();
+    if (timestamp <= 0)
+    {
+        return false;
+    }
+    qint64 age = QDateTime::currentMSecsSinceEpoch() - timestamp;
+    return age > CommandStalenessThresholdMs;
+}
+
+qint64 TcpController::getDeviceStateVersion(const QString &deviceId) const
+{
+    return m_deviceStateVersion.value(deviceId, 0);
+}
+
+void TcpController::updateDeviceStateVersion(const QString &deviceId, qint64 version)
+{
+    qint64 &current = m_deviceStateVersion[deviceId];
+    if (version > current)
+    {
+        current = version;
+    }
 }
